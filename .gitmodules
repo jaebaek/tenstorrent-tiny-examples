@@ -1,0 +1,3 @@
+[submodule "external/tt-metal"]
+	path = external/tt-metal
+	url = https://github.com/tenstorrent/tt-metal.git
