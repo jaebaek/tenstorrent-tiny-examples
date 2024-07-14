@@ -28,26 +28,59 @@
 
 namespace NAMESPACE {
 void MAIN {
-  uint32_t number_of_cores = get_arg_val<uint32_t>(0);
+  uint32_t core_id = get_arg_val<uint32_t>(0);
+  uint32_t number_of_cores = get_arg_val<uint32_t>(1);
 
-  mm_init();
+  mm_init(tt::CB::c_in0, tt::CB::c_in2, tt::CB::c_out0);
   acquire_dst(tt::DstMode::Full);
 
   cb_wait_front(tt::CB::c_in0, /* number of tiles */ 1);
-  for (uint32_t i = 0; i < number_of_cores; ++i) {
+
+  for (uint32_t i = 0; i < core_id; ++i) {
+    copy_tile_to_dst_init_short();
+
     LOG(DPRINT << "[COMPUTE] loop: " << i << ENDL());
     cb_wait_front(tt::CB::c_in2, /* number of tiles */ 1);
-    matmul_tiles(tt::CB::c_in0, tt::CB::c_in2, 0, 0, /* DST */ i, false);
+    // matmul_tiles(tt::CB::c_in0, tt::CB::c_in2, 0, 0, /* DST */ i, false);
+    copy_tile(tt::CB::c_in2, 0, /* DST */ i);
     cb_pop_front(tt::CB::c_in2, /* number of tiles */ 1);
     LOG(DPRINT << "[COMPUTE] loop tail: " << i << ENDL());
+
+    cb_reserve_back(tt::CB::c_out0, /* number of tiles */ 1);
+    pack_tile(/* DST */ i, tt::CB::c_out0);
+    cb_push_back(tt::CB::c_out0, /* number of tiles */ 1);
+  }
+
+  copy_tile_to_dst_init_short();
+
+  LOG(DPRINT << "[COMPUTE] loop: " << core_id << ENDL());
+  cb_wait_front(tt::CB::c_in1, /* number of tiles */ 1);
+  cb_wait_front(tt::CB::c_in2, /* number of tiles */ 1);
+  // matmul_tiles(tt::CB::c_in0, tt::CB::c_in1, 0, 0, /* DST */ core_id, false);
+  copy_tile(tt::CB::c_in1, 0, /* DST */ core_id);
+  cb_pop_front(tt::CB::c_in2, /* number of tiles */ 1);
+  cb_pop_front(tt::CB::c_in1, /* number of tiles */ 1);
+  LOG(DPRINT << "[COMPUTE] loop tail: " << core_id << ENDL());
+
+  cb_reserve_back(tt::CB::c_out0, /* number of tiles */ 1);
+  pack_tile(/* DST */ core_id, tt::CB::c_out0);
+  cb_push_back(tt::CB::c_out0, /* number of tiles */ 1);
+
+  for (uint32_t i = core_id + 1; i < number_of_cores; ++i) {
+    copy_tile_to_dst_init_short();
+
+    LOG(DPRINT << "[COMPUTE] loop: " << i << ENDL());
+    cb_wait_front(tt::CB::c_in2, /* number of tiles */ 1);
+    // matmul_tiles(tt::CB::c_in0, tt::CB::c_in2, 0, 0, /* DST */ i, false);
+    copy_tile(tt::CB::c_in2, 0, /* DST */ i);
+    cb_pop_front(tt::CB::c_in2, /* number of tiles */ 1);
+    LOG(DPRINT << "[COMPUTE] loop tail: " << i << ENDL());
+
+    cb_reserve_back(tt::CB::c_out0, /* number of tiles */ 1);
+    pack_tile(/* DST */ i, tt::CB::c_out0);
+    cb_push_back(tt::CB::c_out0, /* number of tiles */ 1);
   }
   cb_pop_front(tt::CB::c_in0, /* number of tiles */ 1);
-
-  cb_reserve_back(tt::CB::c_out0, /* number of tiles */ number_of_cores);
-  for (uint32_t i = 0; i < number_of_cores; ++i) {
-    pack_tile(/* DST */ i, tt::CB::c_out0);
-  }
-  cb_push_back(tt::CB::c_out0, /* number of tiles */ number_of_cores);
 
   release_dst(tt::DstMode::Full);
 }

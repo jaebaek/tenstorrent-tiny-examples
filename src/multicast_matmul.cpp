@@ -101,8 +101,12 @@ void SetWriteKernel(tt::tt_metal::Program& program, CoreCoord core_grid,
           .noc = NOC::RISCV_0_default});
 
   uint32_t number_of_cores = core_grid.x * core_grid.y;
-  tt::tt_metal::SetRuntimeArgs(program, writer_id, all_cores,
-                               {number_of_cores, output_device_dram_address});
+  for (uint32_t i = 0; i < number_of_cores; ++i) {
+    CoreCoord core = {i % core_grid.x, i / core_grid.x};
+    tt::tt_metal::SetRuntimeArgs(
+        program, writer_id, core,
+        {i, number_of_cores, output_device_dram_address});
+  }
 }
 
 void SetComputeKernel(tt::tt_metal::Program& program, CoreCoord core_grid) {
@@ -112,8 +116,11 @@ void SetComputeKernel(tt::tt_metal::Program& program, CoreCoord core_grid) {
       tt::tt_metal::ComputeConfig{.math_fidelity = MathFidelity::HiFi4});
 
   uint32_t number_of_cores = core_grid.x * core_grid.y;
-  tt::tt_metal::SetRuntimeArgs(program, compute_id, all_cores,
-                               {number_of_cores});
+  for (uint32_t i = 0; i < number_of_cores; ++i) {
+    CoreCoord core = {i % core_grid.x, i / core_grid.x};
+    tt::tt_metal::SetRuntimeArgs(program, compute_id, core,
+                                 {i, number_of_cores});
+  }
 }
 
 void SetKernels(tt::tt_metal::Program& program, CoreCoord core_grid,
@@ -154,8 +161,7 @@ tiny::Result _Run(std::shared_ptr<tt::tt_metal::Device> device,
   CreateCircularBufferOnDevice<T>(tt::CB::c_in0, program, all_cores);
   CreateCircularBufferOnDevice<T>(tt::CB::c_in1, program, all_cores);
   CreateCircularBufferOnDevice<T>(tt::CB::c_in2, program, all_cores);
-  CreateCircularBufferOnDevice<T>(tt::CB::c_out0, program, all_cores,
-                                  num_cores);
+  CreateCircularBufferOnDevice<T>(tt::CB::c_out0, program, all_cores);
 
   auto receiver_sema_addr =
       tt::tt_metal::CreateSemaphore(program, all_cores, 0);

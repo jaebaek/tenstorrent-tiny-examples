@@ -53,12 +53,14 @@ void kernel_main() {
   noc_async_read_barrier();
   cb_push_back(tt::CB::c_in0, /* number of tiles */ 1);
 
-  uint32_t number_of_cores = core_grid_x * core_grid_y;
+  volatile tt_l1_ptr float* ptr =
+      reinterpret_cast<volatile tt_l1_ptr float*>(L1_write_addr_in0);
+  LOG(DPRINT << "[READER] dram -> cb0: " << *(ptr) << ENDL());
+  ptr =
+      reinterpret_cast<volatile tt_l1_ptr float*>(L1_write_addr_in0 + 4);
+  LOG(DPRINT << "[READER] dram -> cb0: " << *(ptr) << ENDL());
 
-  // Read a single tile from DRAM |input1_dram_addr| to circular buffer in1.
-  cb_reserve_back(tt::CB::c_in1, /* number of tiles */ 1);
-  uint32_t L1_write_addr_in1 = get_write_ptr(tt::CB::c_in1);
-  bank_for_input1.noc_async_read_tile(core_id, L1_write_addr_in1);
+  uint32_t number_of_cores = core_grid_x * core_grid_y;
 
   // ---- Multi-casting start ----
   // Based on multi-casting,
@@ -94,14 +96,14 @@ void kernel_main() {
     volatile tt_l1_ptr float* ptr_first_float =
         reinterpret_cast<volatile tt_l1_ptr float*>(L1_write_addr_cb2);
     LOG(DPRINT << "[READER] receive cb2: " << *(ptr_first_float) << ENDL());
+    ptr_first_float =
+        reinterpret_cast<volatile tt_l1_ptr float*>(L1_write_addr_cb2 + 4);
+    LOG(DPRINT << "[READER] receive cb2: " << *(ptr_first_float) << ENDL());
 #endif
 
     LOG(DPRINT << "[READER] done " << core_id << ", " << i << ENDL());
     cb_push_back(tt::CB::c_in2, /* number of tiles */ 1);
   }
-
-  // Barrier for the read from |input1_dram_addr| to |L1_write_addr_in1|.
-  noc_async_read_barrier();
 
   LOG(DPRINT << "[READER] sender sema wait " << sender_sema_addr << ENDL());
 
@@ -110,16 +112,17 @@ void kernel_main() {
   noc_semaphore_wait(sender_sema_addr_ptr, number_of_cores - 1);
   noc_semaphore_set(sender_sema_addr_ptr, 0);
 
-#if TINY_DEBUG  // Print first float from CB1 for debugging.
-  volatile tt_l1_ptr float* ptr_first_float_from_input1 =
-      reinterpret_cast<volatile tt_l1_ptr float*>(L1_write_addr_in1);
-  LOG(DPRINT << "[READER] send cb1: " << *(ptr_first_float_from_input1)
-             << ENDL());
-#endif
-
   // We use c_in2 for the tile sent to other Tensix cores.
   cb_reserve_back(tt::CB::c_in2, /* number of tiles */ 1);
   uint32_t L1_write_addr_in2 = get_write_ptr(tt::CB::c_in2);
+
+  // Read a single tile from DRAM |input1_dram_addr| to circular buffer in1.
+  cb_reserve_back(tt::CB::c_in1, /* number of tiles */ 1);
+  uint32_t L1_write_addr_in1 = get_write_ptr(tt::CB::c_in1);
+  bank_for_input1.noc_async_read_tile(core_id, L1_write_addr_in1);
+
+  // Barrier for the read from |input1_dram_addr| to |L1_write_addr_in1|.
+  noc_async_read_barrier();
 
   uint64_t multicast_dst_noc_addr =
       get_noc_multicast_addr(core_grid_x, 10, 1, 1, L1_write_addr_in2);
@@ -128,6 +131,8 @@ void kernel_main() {
   // must not include source, since we are NOT really doing a local copy.
   noc_async_write_multicast(L1_write_addr_in1, multicast_dst_noc_addr,
                             tile_size_in_bytes, number_of_cores - 1);
+
+  // noc_async_read(L1_write_addr_in1, L1_write_addr_in2, get_tile_size(tt::CB::c_in1));
 
   LOG(DPRINT << "[READER] send sema release" << ENDL());
 
@@ -146,7 +151,18 @@ void kernel_main() {
   // the compute. Since the receiver waits for the semaphore, if it passes the
   // wait line, it means the multi-cast write was already done.
 
+#if TINY_DEBUG  // Print first float from CB1 for debugging.
+  volatile tt_l1_ptr float* ptr_first_float_from_input1 =
+      reinterpret_cast<volatile tt_l1_ptr float*>(L1_write_addr_in1);
+  LOG(DPRINT << "[READER] send cb1: " << *(ptr_first_float_from_input1)
+             << ENDL());
+  ptr_first_float_from_input1 =
+      reinterpret_cast<volatile tt_l1_ptr float*>(L1_write_addr_in1 + 4);
+  LOG(DPRINT << "[READER] send cb1: " << *(ptr_first_float_from_input1) << ENDL());
+#endif
+
   LOG(DPRINT << "[READER] CB push back" << ENDL());
+
   cb_push_back(tt::CB::c_in2, /* number of tiles */ 1);
   cb_push_back(tt::CB::c_in1, /* number of tiles */ 1);
 
@@ -174,6 +190,9 @@ void kernel_main() {
     uint32_t L1_write_addr_cb2 = get_write_ptr(tt::CB::c_in2);
     volatile tt_l1_ptr float* ptr_first_float =
         reinterpret_cast<volatile tt_l1_ptr float*>(L1_write_addr_cb2);
+    LOG(DPRINT << "[READER] receive cb2: " << *(ptr_first_float) << ENDL());
+    ptr_first_float =
+        reinterpret_cast<volatile tt_l1_ptr float*>(L1_write_addr_cb2 + 4);
     LOG(DPRINT << "[READER] receive cb2: " << *(ptr_first_float) << ENDL());
 #endif
 
