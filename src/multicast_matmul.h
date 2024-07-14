@@ -75,6 +75,13 @@ class MulticastMatrixMultiplication : BLASOp {
     return device_;
   }
 
+  void CloseDevice() {
+    if (device_ != nullptr) {
+      tt::tt_metal::CloseDevice(device_.get());
+    }
+    device_ = nullptr;
+  }
+
  private:
   std::shared_ptr<Buffer<T>> inputs_[2];
   std::shared_ptr<Buffer<T>> output_;

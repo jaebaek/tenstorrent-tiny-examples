@@ -16,6 +16,8 @@
 
 #include "compute_kernel_api/matmul.h"
 #include "compute_kernel_api/tile_move_copy.h"
+#include "compute_kernel_api/tilize.h"
+#include "compute_kernel_api/reduce.h"
 #include "debug/dprint.h"
 
 #define TINY_DEBUG 1
@@ -30,24 +32,27 @@ namespace NAMESPACE {
 void MAIN {
   uint32_t number_of_cores = get_arg_val<uint32_t>(0);
 
-  mm_init();
+  mm_init(tt::CB::c_in0, tt::CB::c_in2, tt::CB::c_out0);
   acquire_dst(tt::DstMode::Full);
 
   cb_wait_front(tt::CB::c_in0, /* number of tiles */ 1);
+  uint32_t cb_in0_ptr = cb_interface[tt::CB::c_in0].fifo_rd_ptr << 4;
+
   for (uint32_t i = 0; i < number_of_cores; ++i) {
     LOG(DPRINT << "[COMPUTE] loop: " << i << ENDL());
     cb_wait_front(tt::CB::c_in2, /* number of tiles */ 1);
+
+    uint32_t cb_in2_ptr = cb_interface[tt::CB::c_in2].fifo_rd_ptr << 4;
+
     matmul_tiles(tt::CB::c_in0, tt::CB::c_in2, 0, 0, /* DST */ i, false);
     cb_pop_front(tt::CB::c_in2, /* number of tiles */ 1);
     LOG(DPRINT << "[COMPUTE] loop tail: " << i << ENDL());
+
+    cb_reserve_back(tt::CB::c_out0, /* number of tiles */ 1);
+    pack_tile(/* DST */ i, tt::CB::c_out0);
+    cb_push_back(tt::CB::c_out0, /* number of tiles */ 1);
   }
   cb_pop_front(tt::CB::c_in0, /* number of tiles */ 1);
-
-  cb_reserve_back(tt::CB::c_out0, /* number of tiles */ number_of_cores);
-  for (uint32_t i = 0; i < number_of_cores; ++i) {
-    pack_tile(/* DST */ i, tt::CB::c_out0);
-  }
-  cb_push_back(tt::CB::c_out0, /* number of tiles */ number_of_cores);
 
   release_dst(tt::DstMode::Full);
 }

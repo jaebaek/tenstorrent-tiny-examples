@@ -53,6 +53,13 @@ void kernel_main() {
   noc_async_read_barrier();
   cb_push_back(tt::CB::c_in0, /* number of tiles */ 1);
 
+  volatile tt_l1_ptr float* ptr =
+      reinterpret_cast<volatile tt_l1_ptr float*>(L1_write_addr_in0);
+  LOG(DPRINT << "[READER] dram -> cb0: " << *(ptr) << ENDL());
+  ptr =
+      reinterpret_cast<volatile tt_l1_ptr float*>(L1_write_addr_in0 + 4);
+  LOG(DPRINT << "[READER] dram -> cb0: " << *(ptr) << ENDL());
+
   uint32_t number_of_cores = core_grid_x * core_grid_y;
 
   // Read a single tile from DRAM |input1_dram_addr| to circular buffer in1.
@@ -94,6 +101,9 @@ void kernel_main() {
     volatile tt_l1_ptr float* ptr_first_float =
         reinterpret_cast<volatile tt_l1_ptr float*>(L1_write_addr_cb2);
     LOG(DPRINT << "[READER] receive cb2: " << *(ptr_first_float) << ENDL());
+    ptr_first_float =
+        reinterpret_cast<volatile tt_l1_ptr float*>(L1_write_addr_cb2 + 4);
+    LOG(DPRINT << "[READER] receive cb2: " << *(ptr_first_float) << ENDL());
 #endif
 
     LOG(DPRINT << "[READER] done " << core_id << ", " << i << ENDL());
@@ -115,6 +125,9 @@ void kernel_main() {
       reinterpret_cast<volatile tt_l1_ptr float*>(L1_write_addr_in1);
   LOG(DPRINT << "[READER] send cb1: " << *(ptr_first_float_from_input1)
              << ENDL());
+  ptr_first_float_from_input1 =
+      reinterpret_cast<volatile tt_l1_ptr float*>(L1_write_addr_in1 + 4);
+  LOG(DPRINT << "[READER] send cb1: " << *(ptr_first_float_from_input1) << ENDL());
 #endif
 
   // We use c_in2 for the tile sent to other Tensix cores.
@@ -174,6 +187,9 @@ void kernel_main() {
     uint32_t L1_write_addr_cb2 = get_write_ptr(tt::CB::c_in2);
     volatile tt_l1_ptr float* ptr_first_float =
         reinterpret_cast<volatile tt_l1_ptr float*>(L1_write_addr_cb2);
+    LOG(DPRINT << "[READER] receive cb2: " << *(ptr_first_float) << ENDL());
+    ptr_first_float =
+        reinterpret_cast<volatile tt_l1_ptr float*>(L1_write_addr_cb2 + 4);
     LOG(DPRINT << "[READER] receive cb2: " << *(ptr_first_float) << ENDL());
 #endif
 
