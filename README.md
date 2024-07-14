@@ -108,7 +108,10 @@ and
 7 7 7 7
 8 8 8 8
 ```
-so after tiling it must be `{1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,6,6,6,6,...}`.
+so after tilizing it must be `{1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,6,6,6,6,...}`.
+
+The only difference of the tilization on Tenstorrent device from the above example
+is the dimension of the tile matrix. As explained above, it is 32 by 32.
 
 The untilization is the opposite conversion.
 
