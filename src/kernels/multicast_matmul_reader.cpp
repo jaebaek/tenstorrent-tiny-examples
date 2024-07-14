@@ -17,6 +17,14 @@
 #include "dataflow_api.h"
 #include "debug/dprint.h"
 
+#define TINY_DEBUG 1
+
+#if TINY_DEBUG
+#define LOG(X) DPRINT_DATA1(X)
+#else
+#define LOG(X)
+#endif
+
 const uint32_t PHYSICAL_CORE_Y[] = {1, 3, 4, 5, 7, 8, 9, 10};
 
 void kernel_main() {
@@ -57,7 +65,7 @@ void kernel_main() {
   //  1. Receive i-th tile of input1 matrix from i-th Tensix core.
   //  2. Send |core_id|-th tile of input1 matrix to all other Tensix cores.
 
-  DPRINT_DATA1(DPRINT << "[READER] Multicast start" << ENDL());
+  LOG(DPRINT << "[READER] Multicast start" << ENDL());
 
   volatile tt_l1_ptr uint32_t* receiver_sema_addr_ptr =
       reinterpret_cast<volatile tt_l1_ptr uint32_t*>(receiver_sema_addr);
@@ -68,35 +76,46 @@ void kernel_main() {
     uint32_t sender_noc_y = PHYSICAL_CORE_Y[i / core_grid_x];
     uint64_t sender_sema_noc_addr =
         get_noc_addr(sender_noc_x, sender_noc_y, sender_sema_addr);
-    DPRINT_DATA1(DPRINT << "[READER] sema inc " << core_id << ", " << i
-                        << ENDL());
-    DPRINT_DATA1(DPRINT << "[READER] sender_sema_noc_addr "
-                        << sender_sema_noc_addr << ENDL());
+    LOG(DPRINT << "[READER] sema inc " << core_id << ", " << i << ENDL());
+    LOG(DPRINT << "[READER] sender_sema_noc_addr " << sender_sema_noc_addr
+               << ENDL());
     noc_semaphore_inc(sender_sema_noc_addr, 1);
 
     // We use c_in2 for the tile received from other Tensix cores.
     cb_reserve_back(tt::CB::c_in2, /* number of tiles */ 1);
-    DPRINT_DATA1(DPRINT << "[READER] wait " << core_id << ", " << i << ENDL());
-    DPRINT_DATA1(DPRINT << "[READER] receiver_sema_addr_ptr "
-                        << receiver_sema_addr << ", " << i << ENDL());
+    LOG(DPRINT << "[READER] wait " << core_id << ", " << i << ENDL());
+    LOG(DPRINT << "[READER] receiver_sema_addr_ptr " << receiver_sema_addr
+               << ", " << i << ENDL());
 
-    noc_semaphore_wait_min(receiver_sema_addr_ptr, 1);
-    DPRINT_DATA1(DPRINT << "[READER] done " << core_id << ", " << i << ENDL());
+    noc_semaphore_wait(receiver_sema_addr_ptr, 1);
+
+#if TINY_DEBUG  // Print first float from CB2 for debugging.
+    uint32_t L1_write_addr_cb2 = get_write_ptr(tt::CB::c_in2);
+    volatile tt_l1_ptr float* ptr_first_float =
+        reinterpret_cast<volatile tt_l1_ptr float*>(L1_write_addr_cb2);
+    LOG(DPRINT << "[READER] receive cb2: " << *(ptr_first_float) << ENDL());
+#endif
+
+    LOG(DPRINT << "[READER] done " << core_id << ", " << i << ENDL());
     cb_push_back(tt::CB::c_in2, /* number of tiles */ 1);
   }
 
   // Barrier for the read from |input1_dram_addr| to |L1_write_addr_in1|.
   noc_async_read_barrier();
 
-  DPRINT_DATA1(DPRINT << "[READER] sender sema wait " << sender_sema_addr
-                      << ENDL());
+  LOG(DPRINT << "[READER] sender sema wait " << sender_sema_addr << ENDL());
 
   volatile tt_l1_ptr uint32_t* sender_sema_addr_ptr =
       reinterpret_cast<volatile tt_l1_ptr uint32_t*>(sender_sema_addr);
   noc_semaphore_wait(sender_sema_addr_ptr, number_of_cores - 1);
   noc_semaphore_set(sender_sema_addr_ptr, 0);
 
-  DPRINT_DATA1(DPRINT << "[READER] send data" << ENDL());
+#if TINY_DEBUG  // Print first float from CB1 for debugging.
+  volatile tt_l1_ptr float* ptr_first_float_from_input1 =
+      reinterpret_cast<volatile tt_l1_ptr float*>(L1_write_addr_in1);
+  LOG(DPRINT << "[READER] send cb1: " << *(ptr_first_float_from_input1)
+             << ENDL());
+#endif
 
   // We use c_in2 for the tile sent to other Tensix cores.
   cb_reserve_back(tt::CB::c_in2, /* number of tiles */ 1);
@@ -110,7 +129,7 @@ void kernel_main() {
   noc_async_write_multicast(L1_write_addr_in1, multicast_dst_noc_addr,
                             tile_size_in_bytes, number_of_cores - 1);
 
-  DPRINT_DATA1(DPRINT << "[READER] send sema release" << ENDL());
+  LOG(DPRINT << "[READER] send sema release" << ENDL());
 
   *(receiver_sema_addr_ptr) = 1;  // Unlock semaphores of all receivers.
   uint64_t noc_addr =
@@ -127,7 +146,7 @@ void kernel_main() {
   // the compute. Since the receiver waits for the semaphore, if it passes the
   // wait line, it means the multi-cast write was already done.
 
-  DPRINT_DATA1(DPRINT << "[READER] CB push back" << ENDL());
+  LOG(DPRINT << "[READER] CB push back" << ENDL());
   cb_push_back(tt::CB::c_in2, /* number of tiles */ 1);
   cb_push_back(tt::CB::c_in1, /* number of tiles */ 1);
 
@@ -138,20 +157,27 @@ void kernel_main() {
     uint32_t sender_noc_y = PHYSICAL_CORE_Y[i / core_grid_x];
     uint64_t sender_sema_noc_addr =
         get_noc_addr(sender_noc_x, sender_noc_y, sender_sema_addr);
-    DPRINT_DATA1(DPRINT << "[READER] sema inc " << core_id << ", " << i
-                        << ENDL());
-    DPRINT_DATA1(DPRINT << "[READER] sender_sema_noc_addr "
-                        << sender_sema_noc_addr << ENDL());
+    LOG(DPRINT << "[READER] sema inc " << core_id << ", " << i << ENDL());
+    LOG(DPRINT << "[READER] sender_sema_noc_addr " << sender_sema_noc_addr
+               << ENDL());
     noc_semaphore_inc(sender_sema_noc_addr, 1);
 
     // We use c_in2 for the tile received from other Tensix cores.
     cb_reserve_back(tt::CB::c_in2, /* number of tiles */ 1);
-    DPRINT_DATA1(DPRINT << "[READER] wait " << core_id << ", " << i << ENDL());
-    DPRINT_DATA1(DPRINT << "[READER] receiver_sema_addr_ptr "
-                        << receiver_sema_addr << ", " << i << ENDL());
+    LOG(DPRINT << "[READER] wait " << core_id << ", " << i << ENDL());
+    LOG(DPRINT << "[READER] receiver_sema_addr_ptr " << receiver_sema_addr
+               << ", " << i << ENDL());
 
-    noc_semaphore_wait_min(receiver_sema_addr_ptr, 1);
-    DPRINT_DATA1(DPRINT << "[READER] done " << core_id << ", " << i << ENDL());
+    noc_semaphore_wait(receiver_sema_addr_ptr, 1);
+
+#if TINY_DEBUG  // Print first float from CB2 for debugging.
+    uint32_t L1_write_addr_cb2 = get_write_ptr(tt::CB::c_in2);
+    volatile tt_l1_ptr float* ptr_first_float =
+        reinterpret_cast<volatile tt_l1_ptr float*>(L1_write_addr_cb2);
+    LOG(DPRINT << "[READER] receive cb2: " << *(ptr_first_float) << ENDL());
+#endif
+
+    LOG(DPRINT << "[READER] done " << core_id << ", " << i << ENDL());
     cb_push_back(tt::CB::c_in2, /* number of tiles */ 1);
   }
   // ---- Multi-casting end ----
