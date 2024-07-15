@@ -28,6 +28,14 @@ void kernel_main() {
       .data_format = get_dataformat(tt::CB::c_out0)};
 
   for (uint32_t i = 0; i < number_of_cores; ++i) {
+    cb_wait_front(tt::CB::c_out1, /* number of tiles */ 1);
+    uint32_t addr = get_read_ptr(tt::CB::c_out1);
+    cb_pop_front(tt::CB::c_out1, /* number of tiles */ 1);
+
+    cb_wait_front(tt::CB::c_out2, /* number of tiles */ 1);
+    addr = get_read_ptr(tt::CB::c_out2);
+    cb_pop_front(tt::CB::c_out2, /* number of tiles */ 1);
+
     cb_wait_front(tt::CB::c_out0, /* number of tiles */ 1);
     uint32_t L1_read_addr_out = get_read_ptr(tt::CB::c_out0);
     noc_async_write_tile(i, bank_for_output, L1_read_addr_out);

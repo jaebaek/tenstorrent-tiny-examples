@@ -17,7 +17,6 @@
 #include "compute_kernel_api/matmul.h"
 #include "compute_kernel_api/tile_move_copy.h"
 #include "compute_kernel_api/tilize.h"
-#include "compute_kernel_api/reduce.h"
 #include "debug/dprint.h"
 
 #define TINY_DEBUG 1
@@ -41,6 +40,20 @@ void MAIN {
   for (uint32_t i = 0; i < number_of_cores; ++i) {
     LOG(DPRINT << "[COMPUTE] loop: " << i << ENDL());
     cb_wait_front(tt::CB::c_in2, /* number of tiles */ 1);
+
+    // ---- can trigger denial of service ----
+    copy_tile(tt::CB::c_in0, 0, /* DST */ i);
+
+    cb_reserve_back(tt::CB::c_out1, /* number of tiles */ 1);
+    pack_tile(/* DST */ i, tt::CB::c_out1);
+    cb_push_back(tt::CB::c_out1, /* number of tiles */ 1);
+
+    copy_tile(tt::CB::c_in2, 0, /* DST */ i);
+
+    cb_reserve_back(tt::CB::c_out2, /* number of tiles */ 1);
+    pack_tile(/* DST */ i, tt::CB::c_out2);
+    cb_push_back(tt::CB::c_out2, /* number of tiles */ 1);
+    // ----
 
     uint32_t cb_in2_ptr = cb_interface[tt::CB::c_in2].fifo_rd_ptr << 4;
 

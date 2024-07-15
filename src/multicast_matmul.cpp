@@ -159,6 +159,8 @@ tiny::Result _Run(std::shared_ptr<tt::tt_metal::Device> device,
   CreateCircularBufferOnDevice<T>(tt::CB::c_in1, program, all_cores);
   CreateCircularBufferOnDevice<T>(tt::CB::c_in2, program, all_cores);
   CreateCircularBufferOnDevice<T>(tt::CB::c_out0, program, all_cores);
+  CreateCircularBufferOnDevice<T>(tt::CB::c_out1, program, all_cores);
+  CreateCircularBufferOnDevice<T>(tt::CB::c_out2, program, all_cores);
 
   auto receiver_sema_addr =
       tt::tt_metal::CreateSemaphore(program, all_cores, 0);
