@@ -12,6 +12,8 @@ add_executable(tiny_tt_examples
     matmul_cpu.h
     multicast_matmul.cpp
     multicast_matmul.h
+    simple_multicast.cpp
+    simple_multicast.h
     main.cpp
 )
 

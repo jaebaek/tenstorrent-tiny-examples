@@ -22,6 +22,7 @@
 #include "log.h"
 #include "matmul_cpu.h"
 #include "multicast_matmul.h"
+#include "simple_multicast.h"
 #include "single_tile_matmul.h"
 #include "tt_metal/common/bfloat16.hpp"
 #include "tt_metal/common/tilize_untilize.hpp"
@@ -86,6 +87,32 @@ bool IsErrorLargerThanThreshold<bfloat16>(
 }
 
 template <typename T>
+bool IsErrorLargerThanThreshold(std::shared_ptr<tiny::Buffer<T>> output0,
+                                uint32_t from0, uint32_t to0,
+                                std::shared_ptr<tiny::Buffer<T>> output1,
+                                uint32_t from1, uint32_t to1) {
+  assert(to0 - from0 == to1 - from1);
+  bool pass = true;
+  auto& output_vec0 = output0->GetVector();
+  auto& output_vec1 = output1->GetVector();
+  uint32_t max_print_count = 0;
+  for (uint32_t i = 0; i < to1 - from1; ++i) {
+    float result0 = static_cast<float>(output_vec0[i + from0]);
+    float result1 = static_cast<float>(output_vec1[i + from1]);
+    float error = std::fabsf(result0 - result1);
+    if (error > 0.006f && error > std::fabsf(result0) * 0.006f) {
+#if DEBUG
+      std::cout << i << ": " << result0 << ", " << result1 << std::endl;
+#endif
+      pass = false;
+      ++max_print_count;
+      if (max_print_count >= 80) return pass;
+    }
+  }
+  return pass;
+}
+
+template <typename T>
 void TestSingleTileMatrixMultiplication() {
   const uint32_t number_of_elems = tiny::TileWidth() * tiny::TileHeight();
   auto input0 = std::make_shared<tiny::Buffer<T>>(number_of_elems, 123);
@@ -111,6 +138,31 @@ void TestSingleTileMatrixMultiplication() {
   bool pass = IsErrorLargerThanThreshold<T>(
       output_cpu_matmul, output_single_tile_matmul, tiny::TileWidth(),
       tiny::TileHeight());
+  if (pass) {
+    log_green("-- PASS: {} --", __FUNCTION__);
+  } else {
+    log_error("-- FAIL: {} --", __FUNCTION__);
+  }
+}
+
+template <typename T>
+void TestSimpleMulticast() {
+  const uint32_t tile_size = tiny::TileWidth() * tiny::TileHeight();
+  auto input = std::make_shared<tiny::Buffer<T>>(tile_size, 123);
+  auto output = std::make_shared<tiny::Buffer<T>>(4 * tile_size);
+
+  tiny::SimpleMulticast<T> simple_multicast;
+  simple_multicast.SetBuffers(input, output);
+  simple_multicast.Run();
+
+  bool pass =
+      IsErrorLargerThanThreshold<T>(input, 0, tile_size, output, 0, tile_size);
+  pass = pass && IsErrorLargerThanThreshold<T>(input, 0, tile_size, output,
+                                               tile_size, 2 * tile_size);
+  pass = pass && IsErrorLargerThanThreshold<T>(input, 0, tile_size, output,
+                                               2 * tile_size, 3 * tile_size);
+  pass = pass && IsErrorLargerThanThreshold<T>(input, 0, tile_size, output,
+                                               3 * tile_size, 4 * tile_size);
   if (pass) {
     log_green("-- PASS: {} --", __FUNCTION__);
   } else {
@@ -190,6 +242,16 @@ int main(int argc, const char* argv[]) {
   } catch (const std::exception& e) {
     log_error(
         "TestMulticastMatrixMultiplication::Run() failed with exception!");
+    log_error("{}", e.what());
+    throw;
+  }
+#endif
+
+#if 1
+  try {
+    TestSimpleMulticast<float>();
+  } catch (const std::exception& e) {
+    log_error("TestSimpleMulticast::Run() for float failed with exception!");
     log_error("{}", e.what());
     throw;
   }
