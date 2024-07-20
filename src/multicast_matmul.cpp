@@ -136,7 +136,7 @@ void SetKernels(tt::tt_metal::Program& program, CoreCoord core_grid,
 }
 
 template <typename T>
-tiny::Result _Run(std::shared_ptr<tt::tt_metal::Device> device,
+tiny::Result _Run(tt::tt_metal::Device* device,
                   std::shared_ptr<tiny::Buffer<T>> input0,
                   std::shared_ptr<tiny::Buffer<T>> input1,
                   std::shared_ptr<tiny::Buffer<T>> output) {
@@ -152,11 +152,11 @@ tiny::Result _Run(std::shared_ptr<tt::tt_metal::Device> device,
   auto all_cores = CoreRange({0, 0}, {core_grid.x - 1, core_grid.y - 1});
 
   auto input0_on_device_dram =
-      CreateBufferOnDeviceDRAM<T>(device.get(), input0->GetSizeInBytes());
+      CreateBufferOnDeviceDRAM<T>(device, input0->GetSizeInBytes());
   auto input1_on_device_dram =
-      CreateBufferOnDeviceDRAM<T>(device.get(), input0->GetSizeInBytes());
+      CreateBufferOnDeviceDRAM<T>(device, input0->GetSizeInBytes());
   auto output_on_device_dram =
-      CreateBufferOnDeviceDRAM<T>(device.get(), output->GetSizeInBytes());
+      CreateBufferOnDeviceDRAM<T>(device, output->GetSizeInBytes());
 
   CreateCircularBufferOnDevice<T>(tt::CB::c_in0, program, all_cores);
   CreateCircularBufferOnDevice<T>(tt::CB::c_in1, program, all_cores);
@@ -188,12 +188,12 @@ namespace tiny {
 
 template <>
 Result MulticastMatrixMultiplication<bfloat16>::Run() {
-  return _Run<bfloat16>(GetOrCreateDevice(), inputs_[0], inputs_[1], output_);
+  return _Run<bfloat16>(device_, inputs_[0], inputs_[1], output_);
 }
 
 template <>
 Result MulticastMatrixMultiplication<float>::Run() {
-  return _Run<float>(GetOrCreateDevice(), inputs_[0], inputs_[1], output_);
+  return _Run<float>(device_, inputs_[0], inputs_[1], output_);
 }
 
 } /* namespace tiny */

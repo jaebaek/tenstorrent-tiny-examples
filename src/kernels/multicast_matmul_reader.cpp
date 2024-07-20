@@ -56,8 +56,7 @@ void kernel_main() {
   volatile tt_l1_ptr float* ptr =
       reinterpret_cast<volatile tt_l1_ptr float*>(L1_write_addr_in0);
   LOG(DPRINT << "[READER] dram -> cb0: " << *(ptr) << ENDL());
-  ptr =
-      reinterpret_cast<volatile tt_l1_ptr float*>(L1_write_addr_in0 + 4);
+  ptr = reinterpret_cast<volatile tt_l1_ptr float*>(L1_write_addr_in0 + 4);
   LOG(DPRINT << "[READER] dram -> cb0: " << *(ptr) << ENDL());
 
   uint32_t number_of_cores = core_grid_x * core_grid_y;
@@ -132,8 +131,6 @@ void kernel_main() {
   noc_async_write_multicast(L1_write_addr_in1, multicast_dst_noc_addr,
                             tile_size_in_bytes, number_of_cores - 1);
 
-  // noc_async_read(L1_write_addr_in1, L1_write_addr_in2, get_tile_size(tt::CB::c_in1));
-
   LOG(DPRINT << "[READER] send sema release" << ENDL());
 
   *(receiver_sema_addr_ptr) = 1;  // Unlock semaphores of all receivers.
@@ -158,7 +155,8 @@ void kernel_main() {
              << ENDL());
   ptr_first_float_from_input1 =
       reinterpret_cast<volatile tt_l1_ptr float*>(L1_write_addr_in1 + 4);
-  LOG(DPRINT << "[READER] send cb1: " << *(ptr_first_float_from_input1) << ENDL());
+  LOG(DPRINT << "[READER] send cb1: " << *(ptr_first_float_from_input1)
+             << ENDL());
 #endif
 
   LOG(DPRINT << "[READER] CB push back" << ENDL());

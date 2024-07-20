@@ -41,20 +41,15 @@ namespace tiny {
 template <typename T>
 class MulticastMatrixMultiplication : BLASOp {
  public:
-  MulticastMatrixMultiplication() : device_(nullptr) {}
-
-  ~MulticastMatrixMultiplication() {
-    if (device_ != nullptr) {
-      tt::tt_metal::CloseDevice(device_.get());
-    }
-  }
+  MulticastMatrixMultiplication(tt::tt_metal::Device* device)
+      : device_(device) {}
 
   Result Run();
 
   void SetBuffers(std::shared_ptr<Buffer<T>> input0,
                   std::shared_ptr<Buffer<T>> input1,
                   std::shared_ptr<Buffer<T>> output) {
-    auto core_grid = GetOrCreateDevice()->compute_with_storage_grid_size();
+    auto core_grid = device_->compute_with_storage_grid_size();
     uint32_t num_cores = core_grid.x * core_grid.y;
     assert(input0->GetSizeInBytes() == num_cores * tiny::SingleTileSize<T>());
     assert(input1->GetSizeInBytes() == num_cores * tiny::SingleTileSize<T>());
@@ -66,26 +61,10 @@ class MulticastMatrixMultiplication : BLASOp {
     output_ = output;
   }
 
-  std::shared_ptr<tt::tt_metal::Device> GetOrCreateDevice() {
-    if (device_ == nullptr) {
-      constexpr int device_id = 0;
-      device_ = std::shared_ptr<tt::tt_metal::Device>(
-          tt::tt_metal::CreateDevice(device_id));
-    }
-    return device_;
-  }
-
-  void CloseDevice() {
-    if (device_ != nullptr) {
-      tt::tt_metal::CloseDevice(device_.get());
-    }
-    device_ = nullptr;
-  }
-
  private:
   std::shared_ptr<Buffer<T>> inputs_[2];
   std::shared_ptr<Buffer<T>> output_;
-  std::shared_ptr<tt::tt_metal::Device> device_;
+  tt::tt_metal::Device* device_;
 };
 
 } /* namespace tiny */

@@ -41,8 +41,11 @@ void MAIN {
 
     LOG(DPRINT << "[COMPUTE] loop: " << i << ENDL());
     cb_wait_front(tt::CB::c_in2, /* number of tiles */ 1);
-    // matmul_tiles(tt::CB::c_in0, tt::CB::c_in2, 0, 0, /* DST */ i, false);
+#if TINY_DEBUG
     copy_tile(tt::CB::c_in2, 0, /* DST */ i);
+#else
+    matmul_tiles(tt::CB::c_in0, tt::CB::c_in2, 0, 0, /* DST */ i, false);
+#endif
     cb_pop_front(tt::CB::c_in2, /* number of tiles */ 1);
     LOG(DPRINT << "[COMPUTE] loop tail: " << i << ENDL());
 
@@ -56,8 +59,11 @@ void MAIN {
   LOG(DPRINT << "[COMPUTE] loop: " << core_id << ENDL());
   cb_wait_front(tt::CB::c_in1, /* number of tiles */ 1);
   cb_wait_front(tt::CB::c_in2, /* number of tiles */ 1);
-  // matmul_tiles(tt::CB::c_in0, tt::CB::c_in1, 0, 0, /* DST */ core_id, false);
+#if TINY_DEBUG
   copy_tile(tt::CB::c_in1, 0, /* DST */ core_id);
+#else
+  matmul_tiles(tt::CB::c_in0, tt::CB::c_in1, 0, 0, /* DST */ core_id, false);
+#endif
   cb_pop_front(tt::CB::c_in2, /* number of tiles */ 1);
   cb_pop_front(tt::CB::c_in1, /* number of tiles */ 1);
   LOG(DPRINT << "[COMPUTE] loop tail: " << core_id << ENDL());
@@ -71,8 +77,11 @@ void MAIN {
 
     LOG(DPRINT << "[COMPUTE] loop: " << i << ENDL());
     cb_wait_front(tt::CB::c_in2, /* number of tiles */ 1);
-    // matmul_tiles(tt::CB::c_in0, tt::CB::c_in2, 0, 0, /* DST */ i, false);
+#if TINY_DEBUG
     copy_tile(tt::CB::c_in2, 0, /* DST */ i);
+#else
+    matmul_tiles(tt::CB::c_in0, tt::CB::c_in2, 0, 0, /* DST */ i, false);
+#endif
     cb_pop_front(tt::CB::c_in2, /* number of tiles */ 1);
     LOG(DPRINT << "[COMPUTE] loop tail: " << i << ENDL());
 

@@ -27,6 +27,8 @@
 #include "tt_metal/common/tilize_untilize.hpp"
 #include "utils.h"
 
+#define DEBUG 1
+
 namespace {
 
 template <typename T>
@@ -43,8 +45,10 @@ bool IsErrorLargerThanThreshold(std::shared_ptr<tiny::Buffer<T>> output0,
       float result1 = static_cast<float>(output_vec1[width * i + j]);
       float error = std::fabsf(result0 - result1);
       if (error > 0.006f && error > std::fabsf(result0) * 0.006f) {
+#if DEBUG
         std::cout << i << ", " << j << ", " << result0 << ", " << result1
                   << std::endl;
+#endif
         pass = false;
         ++max_print_count;
         if (max_print_count >= 80) return pass;
@@ -69,7 +73,9 @@ bool IsErrorLargerThanThreshold<bfloat16>(
       float result1 = output_vec1[width * i + j].to_float();
       float error = std::fabsf(result0 - result1);
       if (error > 0.025f && error > std::fabsf(result0) * 0.025f) {
+#if DEBUG
         std::cout << result0 << ", " << result1 << std::endl;
+#endif
         pass = false;
         ++max_print_count;
         if (max_print_count >= 80) return pass;
@@ -114,8 +120,8 @@ void TestSingleTileMatrixMultiplication() {
 
 template <typename T>
 void TestMulticastMatrixMultiplication() {
-  tiny::MulticastMatrixMultiplication<T> multicast_matmul;
-  auto device = multicast_matmul.GetOrCreateDevice();
+  tt::tt_metal::Device* device = tt::tt_metal::CreateDevice(0);
+  tiny::MulticastMatrixMultiplication<T> multicast_matmul(device);
   auto core_grid = device->compute_with_storage_grid_size();
   uint32_t num_cores = core_grid.x * core_grid.y;
 
@@ -142,68 +148,14 @@ void TestMulticastMatrixMultiplication() {
   multicast_matmul.SetBuffers(input0, input1, output_multicast_matmul);
   multicast_matmul.Run();
 
-//  output_multicast_matmul->Untilize(num_cores * tiny::TileWidth(),
-//                                    num_cores * tiny::TileHeight());
+  output_multicast_matmul->Untilize(num_cores * tiny::TileWidth(),
+                                    num_cores * tiny::TileHeight());
 
-  bool pass = IsErrorLargerThanThreshold<T>(
-      output_cpu_matmul, output_multicast_matmul, num_cores * tiny::TileWidth(),
-      num_cores * tiny::TileHeight());
-
-  // -------
-  multicast_matmul.CloseDevice();
-
-  const uint32_t number_of_elems = tiny::TileWidth() * tiny::TileHeight();
-
-  std::cout << std::endl;
-  std::cout << std::endl;
-  std::cout << "output_multicast_matmul:" << std::endl;
-  for (uint32_t i = 0; i < num_cores; ++i) {
-    std::cout << output_multicast_matmul->GetVector()[i * number_of_elems] << std::endl;
-    std::cout << output_multicast_matmul->GetVector()[i * number_of_elems + 1] << std::endl;
-  }
-  std::cout << std::endl;
-  std::cout << std::endl;
-  std::cout << std::endl;
-
-  auto i0 = std::make_shared<tiny::Buffer<T>>(number_of_elems);
-  auto i1 = std::make_shared<tiny::Buffer<T>>(number_of_elems);
-  input0->Untilize(tiny::TileWidth(), num_cores * tiny::TileHeight());
-  input1->Untilize(num_cores * tiny::TileHeight(), tiny::TileWidth());
-  for (uint32_t i = 0; i < number_of_elems; ++i) {
-    i0->GetVector()[i] = input0->GetVector()[i];
-    i1->GetVector()[i] = input1->GetVector()[i];
-  }
-  auto output_single_tile_matmul =
-      std::make_shared<tiny::Buffer<T>>(number_of_elems);
-  tiny::SingleTileMatrixMultiplication<T> single_tile_matmul;
-  single_tile_matmul.SetBuffers(i0, i1, output_single_tile_matmul);
-  single_tile_matmul.Run();
-  output_single_tile_matmul->Untilize(tiny::TileWidth(), tiny::TileHeight());
-  std::cout << "single matmul:" << std::endl;
-  for (uint32_t i = 0; i < 80; ++i) {
-    std::cout << output_single_tile_matmul->GetVector()[i] << std::endl;
-  }
-  std::cout << std::endl;
-  std::cout << std::endl;
-  std::cout << std::endl;
-  for (uint32_t i = 0; i < 32; ++i) {
-    std::cout << input0->GetVector()[i] << std::endl;
-  }
-  std::cout << std::endl;
-  std::cout << std::endl;
-  std::cout << std::endl;
-  for (uint32_t i = 0; i < num_cores; ++i) {
-    std::cout << input0->GetVector()[i * number_of_elems] << std::endl;
-    std::cout << input0->GetVector()[i * number_of_elems + 1] << std::endl;
-  }
-  std::cout << std::endl;
-  std::cout << std::endl;
-  std::cout << std::endl;
-  for (uint32_t i = 0; i < num_cores; ++i) {
-    std::cout << input1->GetVector()[i * tiny::TileWidth()] << std::endl;
-    std::cout << input1->GetVector()[i * tiny::TileWidth() + 1] << std::endl;
-  }
-  // -------
+  bool pass = tt::tt_metal::CloseDevice(device);
+  pass = pass && IsErrorLargerThanThreshold<T>(output_cpu_matmul,
+                                               output_multicast_matmul,
+                                               num_cores * tiny::TileWidth(),
+                                               num_cores * tiny::TileHeight());
 
   if (pass) {
     log_green("-- PASS: {} --", __FUNCTION__);
@@ -231,6 +183,8 @@ int main(int argc, const char* argv[]) {
     throw;
   }
 
+  // This multi-cast example is not working. Will revisit this later.
+#if 1
   try {
     TestMulticastMatrixMultiplication<float>();
   } catch (const std::exception& e) {
@@ -239,6 +193,7 @@ int main(int argc, const char* argv[]) {
     log_error("{}", e.what());
     throw;
   }
+#endif
 
   return 0;
 }

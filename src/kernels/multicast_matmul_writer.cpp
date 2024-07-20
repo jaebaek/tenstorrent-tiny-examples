@@ -23,7 +23,8 @@ void kernel_main() {
 
   const uint32_t tile_size = get_tile_size(tt::CB::c_out0);
   const InterleavedAddrGenFast</* From DRAM address */ true> bank_for_output = {
-      .bank_base_address = output_dram_addr + number_of_cores * core_id * tile_size,
+      .bank_base_address =
+          output_dram_addr + number_of_cores * core_id * tile_size,
       .page_size = tile_size,
       .data_format = get_dataformat(tt::CB::c_out0)};
 
