@@ -25,6 +25,10 @@
 #define LOG(X)
 #endif
 
+static inline SliceRange hw_all() {
+  return SliceRange{.h0 = 0, .h1 = 32, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1};
+}
+
 void kernel_main() {
   uint32_t input_dram_addr = get_arg_val<uint32_t>(0);
   uint32_t receiver_sema_addr = get_arg_val<uint32_t>(1);
@@ -44,10 +48,8 @@ void kernel_main() {
   cb_reserve_back(tt::CB::c_in1, /* number of tiles */ 1);
   uint32_t L1_write_addr_in1 = get_write_ptr(tt::CB::c_in1);
 
-#if TINY_DEBUG  // Print first float from CB1 for debugging.
-  volatile tt_l1_ptr float* ptr =
-      reinterpret_cast<volatile tt_l1_ptr float*>(L1_write_addr_in0);
-  LOG(DPRINT << "[READER] send cb0: " << *(ptr) << ENDL());
+#if TINY_DEBUG
+  LOG(DPRINT << TSLICE(tt::CB::c_in0, 0, hw_all()) << ENDL());
 #endif
 
   uint64_t multicast_dst_noc_addr =

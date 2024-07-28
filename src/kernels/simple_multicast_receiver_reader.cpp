@@ -25,6 +25,10 @@
 #define LOG(X)
 #endif
 
+static inline SliceRange hw_all() {
+  return SliceRange{.h0 = 0, .h1 = 32, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1};
+}
+
 void kernel_main() {
   uint32_t receiver_sema_addr = get_arg_val<uint32_t>(0);
 
@@ -34,11 +38,8 @@ void kernel_main() {
       reinterpret_cast<volatile tt_l1_ptr uint32_t*>(receiver_sema_addr);
   noc_semaphore_wait(receiver_sema_addr_ptr, 1);
 
-#if TINY_DEBUG  // Print first float from CB1 for debugging.
-  uint32_t L1_write_addr_in1 = get_write_ptr(tt::CB::c_in1);
-  volatile tt_l1_ptr float* ptr_first_float =
-      reinterpret_cast<volatile tt_l1_ptr float*>(L1_write_addr_in1);
-  LOG(DPRINT << "[READER] receive cb1: " << *(ptr_first_float) << ENDL());
+#if TINY_DEBUG
+  LOG(DPRINT << TSLICE(tt::CB::c_in1, 0, hw_all()) << ENDL());
 #endif
 
   cb_push_back(tt::CB::c_in1, /* number of tiles */ 1);

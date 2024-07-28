@@ -112,6 +112,32 @@ bool IsErrorLargerThanThreshold(std::shared_ptr<tiny::Buffer<T>> output0,
   return pass;
 }
 
+template <>
+bool IsErrorLargerThanThreshold<bfloat16>(
+    std::shared_ptr<tiny::Buffer<bfloat16>> output0, uint32_t from0,
+    uint32_t to0, std::shared_ptr<tiny::Buffer<bfloat16>> output1,
+    uint32_t from1, uint32_t to1) {
+  assert(to0 - from0 == to1 - from1);
+  bool pass = true;
+  auto& output_vec0 = output0->GetVector();
+  auto& output_vec1 = output1->GetVector();
+  uint32_t max_print_count = 0;
+  for (uint32_t i = 0; i < to1 - from1; ++i) {
+    float result0 = output_vec0[i + from0].to_float();
+    float result1 = output_vec1[i + from1].to_float();
+    float error = std::fabsf(result0 - result1);
+    if (error > 0.025f && error > std::fabsf(result0) * 0.025f) {
+#if DEBUG
+      std::cout << i << ": " << result0 << ", " << result1 << std::endl;
+#endif
+      pass = false;
+      ++max_print_count;
+      if (max_print_count >= 80) return pass;
+    }
+  }
+  return pass;
+}
+
 template <typename T>
 void TestSingleTileMatrixMultiplication() {
   const uint32_t number_of_elems = tiny::TileWidth() * tiny::TileHeight();
@@ -157,12 +183,16 @@ void TestSimpleMulticast() {
 
   bool pass =
       IsErrorLargerThanThreshold<T>(input, 0, tile_size, output, 0, tile_size);
+  if (pass) log_green("-- Sender output matches --", __FUNCTION__);
   pass = pass && IsErrorLargerThanThreshold<T>(input, 0, tile_size, output,
                                                tile_size, 2 * tile_size);
+  if (pass) log_green("-- First receiver output matches --", __FUNCTION__);
   pass = pass && IsErrorLargerThanThreshold<T>(input, 0, tile_size, output,
                                                2 * tile_size, 3 * tile_size);
+  if (pass) log_green("-- Second receiver output matches --", __FUNCTION__);
   pass = pass && IsErrorLargerThanThreshold<T>(input, 0, tile_size, output,
                                                3 * tile_size, 4 * tile_size);
+  if (pass) log_green("-- Third receiver output matches --", __FUNCTION__);
   if (pass) {
     log_green("-- PASS: {} --", __FUNCTION__);
   } else {

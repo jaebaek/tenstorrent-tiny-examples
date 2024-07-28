@@ -25,6 +25,10 @@
 #define LOG(X)
 #endif
 
+static inline SliceRange hw_all() {
+  return SliceRange{.h0 = 0, .h1 = 32, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1};
+}
+
 void kernel_main() {
   uint32_t core_id = get_arg_val<uint32_t>(0);
   uint32_t output_dram_addr = get_arg_val<uint32_t>(1);
@@ -39,12 +43,10 @@ void kernel_main() {
   LOG(DPRINT << "[WRITER] wait" << ENDL());
 
   cb_wait_front(tt::CB::c_out0, /* number of tiles */ 1);
-  uint32_t L1_read_addr_out = get_read_ptr(tt::CB::c_out0);
-#if TINY_DEBUG  // Print first float from CB1 for debugging.
-  volatile tt_l1_ptr float* ptr_first_float =
-      reinterpret_cast<volatile tt_l1_ptr float*>(L1_read_addr_out);
-  LOG(DPRINT << "[WRITER] receive c_out0: " << *(ptr_first_float) << ENDL());
+#if TINY_DEBUG
+  LOG(DPRINT << TSLICE(tt::CB::c_out0, 0, hw_all()) << ENDL());
 #endif
+  uint32_t L1_read_addr_out = get_read_ptr(tt::CB::c_out0);
   bank_for_output.noc_async_write_tile(0, L1_read_addr_out);
   noc_async_write_barrier();
   cb_pop_front(tt::CB::c_out0, /* number of tiles */ 1);
