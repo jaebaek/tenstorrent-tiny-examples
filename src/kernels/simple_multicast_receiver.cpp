@@ -33,7 +33,7 @@ static inline SliceRange hw_all() {
 
 namespace NAMESPACE {
 void MAIN {
-  copy_tile_init();
+  copy_tile_to_dst_init_short(tt::CB::c_in1);
   acquire_dst(tt::DstMode::Tile);
 
   cb_wait_front(tt::CB::c_in1, /* number of tiles */ 1);

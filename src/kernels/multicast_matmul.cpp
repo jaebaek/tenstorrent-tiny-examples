@@ -18,7 +18,7 @@
 #include "compute_kernel_api/tile_move_copy.h"
 #include "debug/dprint.h"
 
-#define TINY_DEBUG 1
+#define TINY_DEBUG 0
 
 #if TINY_DEBUG
 #define LOG(X) DPRINT_MATH(X)
@@ -37,7 +37,11 @@ void MAIN {
   cb_wait_front(tt::CB::c_in0, /* number of tiles */ 1);
 
   for (uint32_t i = 0; i < core_id; ++i) {
+#if TINY_DEBUG
     copy_tile_to_dst_init_short();
+#else
+    mm_init_short();
+#endif
 
     LOG(DPRINT << "[COMPUTE] loop: " << i << ENDL());
     cb_wait_front(tt::CB::c_in2, /* number of tiles */ 1);
@@ -49,12 +53,19 @@ void MAIN {
     cb_pop_front(tt::CB::c_in2, /* number of tiles */ 1);
     LOG(DPRINT << "[COMPUTE] loop tail: " << i << ENDL());
 
+#if TINY_DEBUG
+    mm_init_short();
+#endif
     cb_reserve_back(tt::CB::c_out0, /* number of tiles */ 1);
     pack_tile(/* DST */ i, tt::CB::c_out0);
     cb_push_back(tt::CB::c_out0, /* number of tiles */ 1);
   }
 
+#if TINY_DEBUG
   copy_tile_to_dst_init_short();
+#else
+  mm_init_short();
+#endif
 
   LOG(DPRINT << "[COMPUTE] loop: " << core_id << ENDL());
   cb_wait_front(tt::CB::c_in1, /* number of tiles */ 1);
@@ -68,12 +79,19 @@ void MAIN {
   cb_pop_front(tt::CB::c_in1, /* number of tiles */ 1);
   LOG(DPRINT << "[COMPUTE] loop tail: " << core_id << ENDL());
 
+#if TINY_DEBUG
+    mm_init_short();
+#endif
   cb_reserve_back(tt::CB::c_out0, /* number of tiles */ 1);
   pack_tile(/* DST */ core_id, tt::CB::c_out0);
   cb_push_back(tt::CB::c_out0, /* number of tiles */ 1);
 
   for (uint32_t i = core_id + 1; i < number_of_cores; ++i) {
+#if TINY_DEBUG
     copy_tile_to_dst_init_short();
+#else
+    mm_init_short();
+#endif
 
     LOG(DPRINT << "[COMPUTE] loop: " << i << ENDL());
     cb_wait_front(tt::CB::c_in2, /* number of tiles */ 1);
@@ -85,6 +103,9 @@ void MAIN {
     cb_pop_front(tt::CB::c_in2, /* number of tiles */ 1);
     LOG(DPRINT << "[COMPUTE] loop tail: " << i << ENDL());
 
+#if TINY_DEBUG
+    mm_init_short();
+#endif
     cb_reserve_back(tt::CB::c_out0, /* number of tiles */ 1);
     pack_tile(/* DST */ i, tt::CB::c_out0);
     cb_push_back(tt::CB::c_out0, /* number of tiles */ 1);
