@@ -45,6 +45,8 @@ void MAIN {
 
   LOG(DPRINT << "[COMPUTE] pack tile" << ENDL());
 
+  mm_init();
+
   cb_reserve_back(tt::CB::c_out0, /* number of tiles */ 1);
   pack_tile(/* DST */ 0, tt::CB::c_out0);
 #if TINY_DEBUG
