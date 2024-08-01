@@ -80,7 +80,7 @@ void MAIN {
   LOG(DPRINT << "[COMPUTE] loop tail: " << core_id << ENDL());
 
 #if TINY_DEBUG
-    mm_init_short();
+  mm_init_short();
 #endif
   cb_reserve_back(tt::CB::c_out0, /* number of tiles */ 1);
   pack_tile(/* DST */ core_id, tt::CB::c_out0);

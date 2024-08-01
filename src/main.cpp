@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "buffer.h"
+#include "conv.h"
 #include "log.h"
 #include "matmul_cpu.h"
 #include "multicast_matmul.h"
@@ -287,5 +288,6 @@ int main(int argc, const char* argv[]) {
   }
 #endif
 
+  run(argc, argv);
   return 0;
 }
