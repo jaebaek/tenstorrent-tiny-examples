@@ -33,9 +33,10 @@ void kernel_main() {
   uint32_t input_dram_addr = get_arg_val<uint32_t>(0);
   uint32_t receiver_sema_addr = get_arg_val<uint32_t>(1);
 
+  const uint32_t tile_size_in_bytes = get_tile_size(tt::CB::c_in0);
   const InterleavedAddrGenFast</* From DRAM address */ true> bank_for_input = {
       .bank_base_address = input_dram_addr,
-      .page_size = get_tile_size(tt::CB::c_in0),
+      .page_size = tile_size_in_bytes,
       .data_format = get_dataformat(tt::CB::c_in0)};
 
   // Read a single tile from DRAM |input_dram_addr| to circular buffer in0.
@@ -44,17 +45,12 @@ void kernel_main() {
   bank_for_input.noc_async_read_tile(0, L1_write_addr_in0);
   noc_async_read_barrier();
 
-  // Send CB::c_in0 tile to receiver's CB::c_in1.
-  cb_reserve_back(tt::CB::c_in1, /* number of tiles */ 1);
-  uint32_t L1_write_addr_in1 = get_write_ptr(tt::CB::c_in1);
-
 #if TINY_DEBUG
   LOG(DPRINT << TSLICE(tt::CB::c_in0, 0, hw_all()) << ENDL());
 #endif
 
   uint64_t multicast_dst_noc_addr =
-      get_noc_multicast_addr(1, 5, 1, 3, L1_write_addr_in1);
-  const uint32_t tile_size_in_bytes = get_tile_size(tt::CB::c_in1);
+      get_noc_multicast_addr(1, 5, 1, 3, L1_write_addr_in0);
   noc_async_write_multicast(L1_write_addr_in0, multicast_dst_noc_addr,
                             tile_size_in_bytes, 3 /* to {1, 3 .. 5}*/);
 
@@ -66,6 +62,6 @@ void kernel_main() {
                               3 /* to {1, 3 .. 5}*/);
   noc_async_write_barrier();
 
-  cb_push_back(tt::CB::c_in1, /* number of tiles */ 1);
   cb_push_back(tt::CB::c_in0, /* number of tiles */ 1);
+  LOG(DPRINT << "[READER] done" << ENDL());
 }

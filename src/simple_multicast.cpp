@@ -91,11 +91,7 @@ void _SetWriteKernel(tt::tt_metal::Program& program,
 
 void _SetComputeKernel(tt::tt_metal::Program& program) {
   tt::tt_metal::CreateKernel(
-      program, "../../src/kernels/simple_multicast_sender.cpp", kSenderCore,
-      tt::tt_metal::ComputeConfig{.math_fidelity = MathFidelity::HiFi4});
-  tt::tt_metal::CreateKernel(
-      program, "../../src/kernels/simple_multicast_receiver.cpp",
-      kReceiverCores,
+      program, "../../src/kernels/simple_multicast.cpp", kAllCores,
       tt::tt_metal::ComputeConfig{.math_fidelity = MathFidelity::HiFi4});
 }
 
@@ -119,8 +115,8 @@ tiny::Result _Run(std::shared_ptr<tiny::Buffer<T>> input,
   auto input_on_device_dram = CreateSingleTileOnDeviceDRAM<T>(device, 1);
   auto output_on_device_dram = CreateSingleTileOnDeviceDRAM<T>(device, 4);
 
-  CreateCircularBufferOnDevice<T>(tt::CB::c_in0, program, kSenderCore);
-  CreateCircularBufferOnDevice<T>(tt::CB::c_in1, program, kAllCores);
+  // CreateCircularBufferOnDevice<T>(tt::CB::c_in0, program, kSenderCore);
+  CreateCircularBufferOnDevice<T>(tt::CB::c_in0, program, kAllCores);
   CreateCircularBufferOnDevice<T>(tt::CB::c_out0, program, kAllCores);
 
   auto receiver_sema_addr =

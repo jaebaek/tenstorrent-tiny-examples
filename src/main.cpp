@@ -282,7 +282,7 @@ int main(int argc, const char* argv[]) {
   }
 
   // This multi-cast example is not working. Will revisit this later.
-#if 1
+#if 0
   try {
     TestMulticastMatrixMultiplication<float>();
   } catch (const std::exception& e) {

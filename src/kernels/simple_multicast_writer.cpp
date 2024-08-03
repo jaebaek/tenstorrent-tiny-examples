@@ -43,6 +43,8 @@ void kernel_main() {
   LOG(DPRINT << "[WRITER] wait" << ENDL());
 
   cb_wait_front(tt::CB::c_out0, /* number of tiles */ 1);
+
+  LOG(DPRINT << "[WRITER] process" << ENDL());
 #if TINY_DEBUG
   LOG(DPRINT << TSLICE(tt::CB::c_out0, 0, hw_all()) << ENDL());
 #endif
@@ -50,4 +52,6 @@ void kernel_main() {
   bank_for_output.noc_async_write_tile(0, L1_read_addr_out);
   noc_async_write_barrier();
   cb_pop_front(tt::CB::c_out0, /* number of tiles */ 1);
+
+  LOG(DPRINT << "[WRITER] done" << ENDL());
 }

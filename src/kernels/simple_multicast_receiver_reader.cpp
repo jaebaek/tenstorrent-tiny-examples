@@ -32,15 +32,15 @@ static inline SliceRange hw_all() {
 void kernel_main() {
   uint32_t receiver_sema_addr = get_arg_val<uint32_t>(0);
 
-  // Receiver sender's CB::c_in0 tile to CB::c_in1.
-  cb_reserve_back(tt::CB::c_in1, /* number of tiles */ 1);
+  cb_reserve_back(tt::CB::c_in0, /* number of tiles */ 1);
   volatile tt_l1_ptr uint32_t* receiver_sema_addr_ptr =
       reinterpret_cast<volatile tt_l1_ptr uint32_t*>(receiver_sema_addr);
   noc_semaphore_wait(receiver_sema_addr_ptr, 1);
 
 #if TINY_DEBUG
-  LOG(DPRINT << TSLICE(tt::CB::c_in1, 0, hw_all()) << ENDL());
+  LOG(DPRINT << TSLICE(tt::CB::c_in0, 0, hw_all()) << ENDL());
 #endif
 
-  cb_push_back(tt::CB::c_in1, /* number of tiles */ 1);
+  cb_push_back(tt::CB::c_in0, /* number of tiles */ 1);
+  LOG(DPRINT << "[READER] done" << ENDL());
 }
