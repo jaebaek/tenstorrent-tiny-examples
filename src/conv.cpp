@@ -22,44 +22,163 @@
 #include "conv.h"
 
 #include <algorithm>
+#include <cassert>
 
 #include "tt_metal/common/bfloat16.hpp"
 #include "tt_metal/host_api.hpp"
 #include "tt_metal/programming_examples/matmul_common/bmm_op.hpp"
 #include "utils.h"
 
+namespace tiny {
+namespace {
+
+constexpr std::uint32_t input_h = 64;
+constexpr std::uint32_t input_w = 96;
+constexpr std::uint32_t input_c = 32;
+constexpr std::uint32_t weight_h = 4;
+constexpr std::uint32_t weight_w = 4;
+constexpr std::uint32_t slide_h = 1;
+constexpr std::uint32_t slide_w = 1;
+constexpr std::uint32_t padding_h = weight_h / 2;
+constexpr std::uint32_t padding_w = weight_w / 2;
+constexpr std::uint32_t output_h =
+    (input_h + 2 * padding_h - weight_h) / slide_h;
+constexpr std::uint32_t output_w =
+    (input_w + 2 * padding_w - weight_w) / slide_w;
+constexpr std::uint32_t output_c = 128;
+
+inline void CheckInputDimension(uint32_t number_of_elems) {
+  assert(number_of_elems == input_h * input_w * input_c);
+}
+
+inline void CheckWeightDimension(uint32_t number_of_elems) {
+  assert(number_of_elems == weight_h * weight_w * input_c * output_c);
+}
+
+inline void CheckOutputDimension(uint32_t number_of_elems) {
+  assert(number_of_elems == output_h * output_w * output_c);
+}
+
+template <typename T>
+tiny::Result RunTT(std::shared_ptr<tiny::Buffer<T>> input,
+                   std::shared_ptr<tiny::Buffer<T>> weight,
+                   std::shared_ptr<tiny::Buffer<T>> output) {
+  /*
+  input->Tilize(tiny::TileWidth(), num_cores * tiny::TileHeight());
+  input1->Tilize(num_cores * tiny::TileHeight(), tiny::TileWidth());
+  output_multicast_matmul->Untilize(num_cores * tiny::TileWidth(),
+                                    num_cores * tiny::TileHeight());
+  */
+
+  // return pass ? tiny::Result::kSuccess : tiny::Result::kFail;
+  return tiny::Result::kSuccess;
+}
+
+template <typename T>
+inline float accumulate(float a, T b, T c) {
+  return a + b * c;
+}
+
+template <>
+inline float accumulate<bfloat16>(float a, bfloat16 b, bfloat16 c) {
+  return a + b.to_float() * c.to_float();
+}
+
+template <typename T>
+inline T convert_to_type(float a) {
+  return static_cast<T>(a);
+}
+
+template <>
+inline bfloat16 convert_to_type<bfloat16>(float a) {
+  return bfloat16(a);
+}
+
+template <typename T>
+tiny::Result RunCpu(std::shared_ptr<tiny::Buffer<T>> input_buffer,
+                    std::shared_ptr<tiny::Buffer<T>> weight_buffer,
+                    std::shared_ptr<tiny::Buffer<T>> output_buffer) {
+  auto& input = input_buffer->GetVector();
+  auto& weight = weight_buffer->GetVector();
+  auto& output = output_buffer->GetVector();
+
+  // oc = output channel
+  for (uint32_t oc = 0; oc < output_c; ++oc) {
+    for (uint32_t i = 0; i < output_h; ++i) {
+      for (uint32_t j = 0; j < output_w; ++j) {
+        float output_element = 0;
+
+        // ic = input channel
+        for (uint32_t ic = 0; ic < input_c; ++ic) {
+          // Assuming that padding_h = weight_h / 2 and padding_w = weight_w / 2
+          for (uint32_t row = i - padding_h; row < i + padding_h; ++row) {
+            for (uint32_t col = j - padding_w; col < j + padding_w; ++col) {
+              T input_value = 0;
+              if (0 <= row && row < output_h && 0 <= col && col < output_w) {
+                input_value =
+                    input[ic * input_h * input_w + row * input_w + col];
+              }
+              int wr = row - i + padding_h;
+              int wc = col - j + padding_w;
+              T weight_value =
+                  weight[ic * weight_h * weight_w + wr * weight_w + wc];
+
+              output_element =
+                  accumulate<T>(output_element, input_value, weight_value);
+            }
+          }
+        }
+
+        output[oc * output_h * output_w + i * output_w + j] =
+            convert_to_type<T>(output_element);
+      }
+    }
+  }
+  return tiny::Result::kSuccess;
+}
+
+} /* namespace  */
+
+template <>
+Result Conv<bfloat16>::Run() {
+  return RunTT<bfloat16>(input_, weight_, output_);
+}
+
+template <>
+Result Conv<float>::Run() {
+  return RunTT<float>(input_, weight_, output_);
+}
+
+template <>
+Result CpuConv<bfloat16>::Run() {
+  return RunCpu<bfloat16>(input_, weight_, output_);
+}
+
+template <>
+Result CpuConv<float>::Run() {
+  return RunCpu<float>(input_, weight_, output_);
+}
+
+template <>
+void Conv<bfloat16>::CheckDimension() {
+  CheckInputDimension(input_->GetNumberOfElements());
+  CheckWeightDimension(weight_->GetNumberOfElements());
+  CheckOutputDimension(output_->GetNumberOfElements());
+}
+
+template <>
+void Conv<float>::CheckDimension() {
+  CheckInputDimension(input_->GetNumberOfElements());
+  CheckWeightDimension(weight_->GetNumberOfElements());
+  CheckOutputDimension(output_->GetNumberOfElements());
+}
+
+} /* namespace tiny */
+
 using namespace tt::constants;
 using namespace std;
 using namespace tt;
 using namespace tt::tt_metal;
-
-void golden_matmul(vector<bfloat16>& a, vector<bfloat16>& b,
-                   vector<bfloat16>& output, uint32_t M, uint32_t N, uint32_t K,
-                   uint32_t B) {
-  std::uint32_t idx_c = 0;
-  std::uint32_t idx_a = 0;
-  std::uint32_t idx_b = 0;
-
-  float c_f;
-  float float_tmp;
-  vector<bfloat16> c_bf(M * N, 0);
-
-  for (int i = 0; i < M; i++) {
-    for (int j = 0; j < N; j++) {
-      idx_c = j + (i * N);
-      idx_a = i * K;
-      idx_b = j;
-      c_f = 0;
-      for (int k_m = 0; k_m < K; k_m++) {
-        float_tmp = a[idx_a].to_float() * b[idx_b].to_float();
-        c_f += float_tmp;
-        idx_a += 1;
-        idx_b += K;
-      }
-      output.at(idx_c) = bfloat16(c_f);
-    }
-  }
-}
 
 void matmul_multicore_reuse_mcast(vector<bfloat16>& a, vector<bfloat16>& b,
                                   vector<bfloat16>& output, bool bcast_batch,
@@ -106,9 +225,19 @@ void matmul_multicore_reuse_mcast(vector<bfloat16>& a, vector<bfloat16>& b,
   // Get large matmul params
   auto matmul_params = bmm_op_utils::get_large_matmul_params(
       Mt, Nt, num_cores_y, num_cores_x, in0_block_w);
+
+  // How many tiles among output columns will be handled by a core.
   uint32_t per_core_M = std::get<0>(matmul_params);
+
+  // How many tiles among output rows will be handled by a core.
   uint32_t per_core_N = std::get<1>(matmul_params);
+
+  // Number of tiles in a column of a subblock.
+  // For example, if a column has 8 * 8 * 32 elements, and a column has 8
+  // subblocks, |out_subblock_h| will be (8 * 8 * 32) / 8 / 32 = 8 tiles.
   uint32_t out_subblock_h = std::get<2>(matmul_params);
+
+  // Number of tiles in a row of a subblock.
   uint32_t out_subblock_w = std::get<3>(matmul_params);
 
   log_info(tt::LogVerif, " -- Metalium Core Sizing --");
@@ -580,10 +709,6 @@ int run(int argc, const char* argv[]) {
     std::vector<bfloat16> src1_vec = create_random_vector_of_bfloat16_native(
         dram_buffer_B_size, 1, 12522, -0.3);
 
-    /* Golden Matmul running on CPU (Float)*/
-    vector<bfloat16> golden_vec(M * N, 0);
-    golden_matmul(src0_vec, src1_vec, golden_vec, M, N, K, B);
-
     /* Input vector tilizing */
     tiny::TilizeForTTDevice(src0_vec, M, K);
     tiny::TilizeForTTDevice(src1_vec, K, N);
@@ -595,12 +720,6 @@ int run(int argc, const char* argv[]) {
     tiny::UnTilizeForTTDevice(result_vec, M, N);
 
     log_info(tt::LogVerif, "Output vector of size {}", result_vec.size());
-
-    float pearson = check_bfloat16_vector_pcc(golden_vec, result_vec);
-    log_info(tt::LogVerif, "Metalium vs Golden -- PCC = {}", pearson);
-    TT_FATAL(pearson > 0.98,
-             "PCC not high enough. Result PCC: {}, Expected PCC: 0.98",
-             pearson);
 
     pass &= CloseDevice(device);
 

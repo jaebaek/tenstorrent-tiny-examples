@@ -247,6 +247,21 @@ void TestMulticastMatrixMultiplication() {
   }
 }
 
+template <typename T>
+void TestConv() {
+  auto input = std::make_shared<tiny::Buffer<T>>(64 * 96 * 32, 123);
+  auto weight = std::make_shared<tiny::Buffer<T>>(4 * 4 * 32 * 128, 456);
+
+  const uint32_t number_of_output_elems = 64 * 96 * 128;
+  auto output_cpu_conv =
+      std::make_shared<tiny::Buffer<T>>(number_of_output_elems);
+  auto output_conv = std::make_shared<tiny::Buffer<T>>(number_of_output_elems);
+
+  tiny::CpuConv<T> cpu_conv;
+  cpu_conv.SetBuffers(input, weight, output_cpu_conv);
+  cpu_conv.Run();
+}
+
 } /* namespace */
 
 int main(int argc, const char* argv[]) {
@@ -288,6 +303,6 @@ int main(int argc, const char* argv[]) {
   }
 #endif
 
-  run(argc, argv);
+  TestConv<float>();
   return 0;
 }
