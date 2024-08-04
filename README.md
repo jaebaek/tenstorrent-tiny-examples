@@ -167,6 +167,130 @@ setting `export TT_METAL_DPRINT_CORES=0,0` and
 the results showed that the first value of matrices between receivers and
 senders are matching.
 
+### Compute kernel debugging tip: UNPACK, MATH, PACK kernels
+
+A compute kernel looks like a single kernel, but `tt::tt_metal::CreateKernel(..)`
+actually generates three kernels: UNPACK, MATH, PACK kernels.
+
+You can check it with the following steps:
+* For a simple TT program, intentionally add a syntax error to the compute kernel.
+* Running the program will fail with compile errors like:
+```
+cd /path/to/conv-example-tt-grayskull/external/tt-metal//built/2052/kernels/simple_multicast/1584599061800683236/trisc2/ && /path/to/conv-example-tt-grayskull/external/tt-metal//tt_metal/third_party/sfpi/compiler/bin/riscv32-unknown-elf-g++ -mgrayskull -march=rv32iy -mtune=rvtt-b1 -mabi=ilp32 -std=c++17 -flto -ffast-math -fno-use-cxa-atexit -fno-exceptions -Wall -Werror -Wno-unknown-pragmas -Wno-error=multistatement-macros -Wno-error=parentheses -Wno-error=unused-but-set-variable -Wno-unused-variable -Wno-unused-function -O3 -DARCH_GRAYSKULL -DTENSIX_FIRMWARE -DLOCAL_MEM_EN=0 -DDEBUG_PRINT_ENABLED -DUCK_CHLKC_PACK -DNAMESPACE=chlkc_pack -DCOMPILE_FOR_TRISC=2 -DKERNEL_BUILD -I. -I.. -I/path/to/conv-example-tt-grayskull/external/tt-metal// -I/path/to/conv-example-tt-grayskull/external/tt-metal//tt_metal -I/path/to/conv-example-tt-grayskull/external/tt-metal//tt_metal/include -I/path/to/conv-example-tt-grayskull/external/tt-metal//tt_metal/hw/inc -I/path/to/conv-example-tt-grayskull/external/tt-metal//tt_metal/hw/inc/debug -I/path/to/conv-example-tt-grayskull/external/tt-metal//tt_metal/hw/inc/grayskull -I/path/to/conv-example-tt-grayskull/external/tt-metal//tt_metal/hw/inc/grayskull/grayskull_defines -I/path/to/conv-example-tt-grayskull/external/tt-metal//tt_metal/hw/inc/grayskull/noc -I/path/to/conv-example-tt-grayskull/external/tt-metal//tt_metal/third_party/umd/device/grayskull -I/path/to/conv-example-tt-grayskull/external/tt-metal//tt_metal/hw/ckernels/grayskull/metal/common -I/path/to/conv-example-tt-grayskull/external/tt-metal//tt_metal/hw/ckernels/grayskull/metal/llk_io -I/path/to/conv-example-tt-grayskull/external/tt-metal//tt_metal/third_party/tt_llk_grayskull/common/inc -I/path/to/conv-example-tt-grayskull/external/tt-metal//tt_metal/third_party/tt_llk_grayskull/llk_lib -I/path/to/conv-example-tt-grayskull/external/tt-metal//tt_metal/hw/ckernels/grayskull/inc -I/path/to/conv-example-tt-grayskull/external/tt-metal//tt_metal/hw/ckernels/grayskull/metal/common -I/path/to/conv-example-tt-grayskull/external/tt-metal//tt_metal/hw/ckernels/grayskull/metal/llk_io -I/path/to/conv-example-tt-grayskull/external/tt-metal//tt_metal/hw/ckernels/grayskull/metal/llk_api -I/path/to/conv-example-tt-grayskull/external/tt-metal//tt_metal/hw/ckernels/grayskull/metal/llk_api/llk_sfpu -I/path/to/conv-example-tt-grayskull/external/tt-metal//tt_metal/third_party/sfpi/include -I/path/to/conv-example-tt-grayskull/external/tt-metal//tt_metal/hw/firmware/src -I/path/to/conv-example-tt-grayskull/external/tt-metal//tt_metal/third_party/tt_llk_grayskull/llk_lib -c -o trisck.o /path/to/conv-example-tt-grayskull/external/tt-metal//tt_metal/hw/firmware/src/trisck.cc
+```
+* If you check the directory e.g.,
+`/path/to/conv-example-tt-grayskull/external/tt-metal//built/2052/kernels/simple_multicast/1584599061800683236/trisc2/`
+you will see the build artifact. For example, `trisc2/trisc2.elf` is an ELF
+binary for RISC-V. We can run
+`/path/to/conv-example-tt-grayskull/external/tt-metal//tt_metal/third_party/sfpi/compiler/bin/riscv32-unknown-elf-objdump`
+and
+`/path/to/conv-example-tt-grayskull/external/tt-metal//tt_metal/third_party/sfpi/compiler/bin/riscv32-unknown-elf-readelf`
+to investigate the binary.
+* We can use `-E` option for the above
+`/path/to/conv-example-tt-grayskull/external/tt-metal//tt_metal/third_party/sfpi/compiler/bin/riscv32-unknown-elf-g++`
+command to get the preprocess result.
+  * Unpack kernel option: `-DUCK_CHLKC_UNPACK -DNAMESPACE=chlkc_unpack`
+  * Math kernel option: `-DUCK_CHLKC_MATH -DNAMESPACE=chlkc_math`
+  * Pack kernel option: `-DUCK_CHLKC_PACK -DNAMESPACE=chlkc_pack`
+
+Interestingly, for the following kernel (simple\_multicast kernel):
+```
+static inline SliceRange hw_all() {
+  return SliceRange{.h0 = 0, .h1 = 32, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1};
+}
+
+namespace NAMESPACE {
+void MAIN {
+  acquire_dst(tt::DstMode::Tile);
+
+  cb_wait_front(tt::CB::c_in0, /* number of tiles */ 1);
+  copy_tile_to_dst_init_short();
+  copy_tile(tt::CB::c_in0, 0, /* DST */ 0);
+#if TINY_DEBUG
+  DPRINT_UNPACK(DPRINT << TSLICE(tt::CB::c_in0, 0, hw_all()) << ENDL());
+#endif
+  cb_pop_front(tt::CB::c_in0, /* number of tiles */ 1);
+
+  // PACK(( llk_pack_hw_configure_disaggregated<false,
+  // DST_ACCUM_MODE>(tt::CB::c_out0) ));
+  PACK((llk_pack_init(tt::CB::c_out0)));
+  // PACK(( llk_setup_outputs()  ));
+  PACK((llk_pack_dest_init<false, DST_ACCUM_MODE>(tt::CB::c_out0)));
+
+  LOG(DPRINT << "[COMPUTE] pack tile" << ENDL());
+
+  cb_reserve_back(tt::CB::c_out0, /* number of tiles */ 1);
+  pack_tile(/* DST */ 0, tt::CB::c_out0);
+  cb_push_back(tt::CB::c_out0, /* number of tiles */ 1);
+
+#if TINY_DEBUG
+  DPRINT_PACK(DPRINT << TSLICE(tt::CB::c_out0, 0, hw_all()) << ENDL());
+#endif
+
+  release_dst(tt::DstMode::Tile);
+  LOG(DPRINT << "[COMPUTE] done" << ENDL());
+}
+}  // namespace NAMESPACE
+```
+
+The PACK kernel uses only the packing part of APIs. For example,
+`cb_wait_front(..)` is not related to packing. The preprocessed
+`cb_wait_front(..)` for PACK kernel is empty:
+```
+inline __attribute__((always_inline)) void cb_wait_front(uint32_t cbid, uint32_t ntiles) {
+    ;
+}
+```
+
+On the other hand, the UNPACK kernel has the following
+`cb_wait_front(..)`:
+```
+inline __attribute__((always_inline)) void cb_wait_front(uint32_t cbid, uint32_t ntiles) {
+    ( llk_wait_tiles(cbid, ntiles) );
+}
+```
+
+To implement this different preprocessed results, tt-metal uses
+`PACK(..), MATH(..), UNPACK(..)` macro.
+
+Another interesting part is `acquire_dst(tt::DstMode mode)`.
+The UNPACK kernel has an empty one:
+```
+inline __attribute__((always_inline)) void acquire_dst(tt::DstMode mode) {
+    ;
+
+    ;
+}
+```
+The MATH kernel waits for DEST available:
+```
+inline __attribute__((always_inline)) void acquire_dst(tt::DstMode mode) {
+    ( llk_math_wait_for_dest_available() );
+
+    ;
+}
+```
+The UNPACK kernel waits for the end of MATH kernel:
+```
+inline __attribute__((always_inline)) void acquire_dst(tt::DstMode mode) {
+    ;
+
+    ( llk_packer_wait_for_math_done() );
+}
+```
+
+[Its implementation](https://github.com/tenstorrent/tt-metal/blob/6d4951a20ca4c392888f924f038ae0780a8cc656/tt_metal/include/compute_kernel_api/reg_api.h#L28-L32) matches the preprocessed code:
+```
+ALWI void acquire_dst(tt::DstMode mode) {
+    MATH(( llk_math_wait_for_dest_available()  ));
+
+    PACK(( llk_packer_wait_for_math_done()  ));
+}
+```
+
+Based on the implementation of `acquire_dst(..)`, if we use it,
+we can guess it executes UNPACK, MATH, PACK in order.
+
 # About license
 
 * At the moment I am writing this document, I am working for Google.
