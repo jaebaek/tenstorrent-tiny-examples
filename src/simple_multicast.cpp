@@ -28,10 +28,10 @@ static const CoreRange kReceiverCores = {{0, 1}, {0, 3}};
 
 template <typename T>
 std::shared_ptr<tt::tt_metal::Buffer> CreateSingleTileOnDeviceDRAM(
-    tt::tt_metal::Device* device, uint32_t number_of_tiles) {
+    tt::tt_metal::Device* device, uint32_t size_in_bytes) {
   tt::tt_metal::InterleavedBufferConfig device_dram_conf{
       .device = device,
-      .size = number_of_tiles * tiny::SingleTileSize<T>(),
+      .size = size_in_bytes,
       .page_size = tiny::SingleTileSize<T>(),
       .buffer_type = tt::tt_metal::BufferType::DRAM};
   return std::move(CreateBuffer(device_dram_conf));
@@ -52,7 +52,8 @@ void CreateCircularBufferOnDevice(
 
 void _SetReaderKernel(tt::tt_metal::Program& program,
                       uint32_t receiver_sema_addr,
-                      uint32_t input_device_dram_address) {
+                      uint32_t input_device_dram_address,
+                      uint32_t output_device_dram_address) {
   auto sender_id = tt::tt_metal::CreateKernel(
       program, "../../src/kernels/simple_multicast_sender_reader.cpp",
       kSenderCore,
@@ -61,47 +62,30 @@ void _SetReaderKernel(tt::tt_metal::Program& program,
           .noc = NOC::RISCV_1_default});
 
   tt::tt_metal::SetRuntimeArgs(program, sender_id, kSenderCore,
-                               {input_device_dram_address, receiver_sema_addr});
+                               {input_device_dram_address, receiver_sema_addr,
+                                output_device_dram_address});
 
   auto receiver_id = tt::tt_metal::CreateKernel(
       program, "../../src/kernels/simple_multicast_receiver_reader.cpp",
       kReceiverCores,
       tt::tt_metal::DataMovementConfig{
-          .processor = tt::tt_metal::DataMovementProcessor::RISCV_1,
-          .noc = NOC::RISCV_1_default});
-
-  tt::tt_metal::SetRuntimeArgs(program, receiver_id, kReceiverCores,
-                               {receiver_sema_addr});
-}
-
-void _SetWriteKernel(tt::tt_metal::Program& program,
-                     uint32_t output_device_dram_address) {
-  auto writer_id = tt::tt_metal::CreateKernel(
-      program, "../../src/kernels/simple_multicast_writer.cpp", kAllCores,
-      tt::tt_metal::DataMovementConfig{
           .processor = tt::tt_metal::DataMovementProcessor::RISCV_0,
           .noc = NOC::RISCV_0_default});
 
-  for (uint32_t i = 0; i < 4; ++i) {
+  for (uint32_t i = 1; i < 4; ++i) {
     CoreCoord core = {0, i};
-    tt::tt_metal::SetRuntimeArgs(program, writer_id, core,
-                                 {i, output_device_dram_address});
+    tt::tt_metal::SetRuntimeArgs(
+        program, receiver_id, core,
+        {i, receiver_sema_addr, output_device_dram_address});
   }
-}
-
-void _SetComputeKernel(tt::tt_metal::Program& program) {
-  tt::tt_metal::CreateKernel(
-      program, "../../src/kernels/simple_multicast.cpp", kAllCores,
-      tt::tt_metal::ComputeConfig{.math_fidelity = MathFidelity::HiFi4});
 }
 
 void _SetKernels(tt::tt_metal::Program& program,
                  uint32_t input_device_dram_address,
                  uint32_t receiver_sema_addr,
                  uint32_t output_device_dram_address) {
-  _SetReaderKernel(program, input_device_dram_address, receiver_sema_addr);
-  _SetWriteKernel(program, output_device_dram_address);
-  _SetComputeKernel(program);
+  _SetReaderKernel(program, input_device_dram_address, receiver_sema_addr,
+                   output_device_dram_address);
 }
 
 template <typename T>
@@ -112,12 +96,12 @@ tiny::Result _Run(std::shared_ptr<tiny::Buffer<T>> input,
   tt::tt_metal::CommandQueue& command_queue = device->command_queue();
   tt::tt_metal::Program program{};
 
-  auto input_on_device_dram = CreateSingleTileOnDeviceDRAM<T>(device, 1);
-  auto output_on_device_dram = CreateSingleTileOnDeviceDRAM<T>(device, 4);
+  auto input_on_device_dram =
+      CreateSingleTileOnDeviceDRAM<T>(device, input->GetSizeInBytes());
+  auto output_on_device_dram =
+      CreateSingleTileOnDeviceDRAM<T>(device, output->GetSizeInBytes());
 
-  // CreateCircularBufferOnDevice<T>(tt::CB::c_in0, program, kSenderCore);
   CreateCircularBufferOnDevice<T>(tt::CB::c_in0, program, kAllCores);
-  CreateCircularBufferOnDevice<T>(tt::CB::c_out0, program, kAllCores);
 
   auto receiver_sema_addr =
       tt::tt_metal::CreateSemaphore(program, kAllCores, 0);

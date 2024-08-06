@@ -30,7 +30,16 @@ static inline SliceRange hw_all() {
 }
 
 void kernel_main() {
-  uint32_t receiver_sema_addr = get_arg_val<uint32_t>(0);
+  uint32_t core_id = get_arg_val<uint32_t>(0);
+  uint32_t receiver_sema_addr = get_arg_val<uint32_t>(1);
+  uint32_t output_dram_addr = get_arg_val<uint32_t>(2);
+
+  const uint32_t tile_size_in_bytes = get_tile_size(tt::CB::c_in0);
+  const DataFormat format = get_dataformat(tt::CB::c_in0);
+  const InterleavedAddrGenFast</* From DRAM address */ true> bank_for_output = {
+      .bank_base_address = output_dram_addr + core_id * tile_size_in_bytes,
+      .page_size = tile_size_in_bytes,
+      .data_format = format};
 
   cb_reserve_back(tt::CB::c_in0, /* number of tiles */ 1);
   volatile tt_l1_ptr uint32_t* receiver_sema_addr_ptr =
@@ -40,6 +49,17 @@ void kernel_main() {
 #if TINY_DEBUG
   LOG(DPRINT << TSLICE(tt::CB::c_in0, 0, hw_all()) << ENDL());
 #endif
+
+  uint32_t L1_read_addr_in0 = get_read_ptr(tt::CB::c_in0);
+#if TINY_DEBUG
+  volatile tt_l1_ptr float* ptr =
+      reinterpret_cast<volatile tt_l1_ptr float*>(L1_read_addr_in0);
+  LOG(DPRINT << *ptr << ENDL());
+  ptr = reinterpret_cast<volatile tt_l1_ptr float*>(L1_read_addr_in0 + 4);
+  LOG(DPRINT << *ptr << ENDL());
+#endif
+  bank_for_output.noc_async_write_tile(0, L1_read_addr_in0);
+  noc_async_write_barrier();
 
   cb_push_back(tt::CB::c_in0, /* number of tiles */ 1);
   LOG(DPRINT << "[READER] done" << ENDL());

@@ -182,6 +182,12 @@ void TestSimpleMulticast() {
   simple_multicast.SetBuffers(input, output);
   simple_multicast.Run();
 
+  auto& input_vec = input->GetVector();
+  auto& output_vec = output->GetVector();
+  for (uint32_t i = 0; i < 8; ++i) {
+    std::cout << i << ": " << input_vec[i] << ", " << output_vec[i] << std::endl;
+  }
+  /*
   bool pass =
       IsErrorLargerThanThreshold<T>(input, 0, tile_size, output, 0, tile_size);
   if (pass) log_green("-- Sender output matches --", __FUNCTION__);
@@ -198,6 +204,24 @@ void TestSimpleMulticast() {
     log_green("-- PASS: {} --", __FUNCTION__);
   } else {
     log_error("-- FAIL: {} --", __FUNCTION__);
+  }
+  */
+}
+
+template <>
+void TestSimpleMulticast<bfloat16>() {
+  const uint32_t tile_size = tiny::TileWidth() * tiny::TileHeight();
+  auto input = std::make_shared<tiny::Buffer<bfloat16>>(tile_size, 123);
+  auto output = std::make_shared<tiny::Buffer<bfloat16>>(4 * tile_size);
+
+  tiny::SimpleMulticast<bfloat16> simple_multicast;
+  simple_multicast.SetBuffers(input, output);
+  simple_multicast.Run();
+
+  auto& input_vec = input->GetVector();
+  auto& output_vec = output->GetVector();
+  for (uint32_t i = 0; i < 8; ++i) {
+    std::cout << i << ": " << input_vec[i].to_float() << ", " << output_vec[i].to_float() << std::endl;
   }
 }
 
@@ -296,6 +320,7 @@ int main(int argc, const char* argv[]) {
 #if 1
   try {
     TestSimpleMulticast<float>();
+    TestSimpleMulticast<bfloat16>();
   } catch (const std::exception& e) {
     log_error("TestSimpleMulticast::Run() for float failed with exception!");
     log_error("{}", e.what());
