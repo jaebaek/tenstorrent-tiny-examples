@@ -1,0 +1,111 @@
+// Copyright (c) 2024 Jaebaek Seo.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "single_tile_loopback.h"
+
+#include <cassert>
+#include <exception>
+#include <memory>
+#include <tuple>
+
+#include "buffer.h"
+#include "tt_metal/common/bfloat16.hpp"
+#include "tt_metal/detail/tt_metal.hpp"
+#include "tt_metal/host_api.hpp"
+#include "utils.h"
+
+namespace {
+
+static const CoreCoord kSingleTileLoopbackCore = {0, 0};
+
+template <typename T>
+std::shared_ptr<tt::tt_metal::Buffer> CreateSingleTileOnDeviceDRAM(
+    tt::tt_metal::Device* device) {
+  tt::tt_metal::InterleavedBufferConfig single_tile_device_dram_conf{
+      .device = device,
+      .size = tiny::SingleTileSize<T>(),
+      .page_size = tiny::SingleTileSize<T>(),
+      .buffer_type = tt::tt_metal::BufferType::DRAM};
+  return std::move(CreateBuffer(single_tile_device_dram_conf));
+}
+
+template <typename T>
+void CreateCircularBufferOnDevice(uint32_t circular_buffer_id,
+                                  tt::tt_metal::Program& program) {
+  tt::DataFormat format = tiny::GetDataFormat<T>();
+  assert(format != tt::DataFormat::Invalid);
+
+  tt::tt_metal::CircularBufferConfig conf(tiny::SingleTileSize<T>(),
+                                          {{circular_buffer_id, format}});
+  conf = conf.set_page_size(circular_buffer_id, tiny::SingleTileSize<T>());
+  tt::tt_metal::CreateCircularBuffer(program, kSingleTileLoopbackCore, conf);
+}
+
+void _SetDataMoveKernel(tt::tt_metal::Program& program,
+                        uint32_t input_device_dram_address,
+                        uint32_t output_device_dram_address) {
+  auto reader_id = tt::tt_metal::CreateKernel(
+      program, "../../src/kernels/single_tile_loopback.cpp",
+      kSingleTileLoopbackCore,
+      tt::tt_metal::DataMovementConfig{
+          .processor = tt::tt_metal::DataMovementProcessor::RISCV_1,
+          .noc = NOC::RISCV_1_default});
+
+  tt::tt_metal::SetRuntimeArgs(
+      program, reader_id, kSingleTileLoopbackCore,
+      {input_device_dram_address, output_device_dram_address});
+}
+
+template <typename T>
+tiny::Result _Run(std::shared_ptr<tiny::Buffer<T>> input,
+                  std::shared_ptr<tiny::Buffer<T>> output) {
+  constexpr int device_id = 0;
+  tt::tt_metal::Device* device = tt::tt_metal::CreateDevice(device_id);
+
+  tt::tt_metal::CommandQueue& command_queue = device->command_queue();
+  tt::tt_metal::Program program{};
+
+  auto input_on_device_dram = CreateSingleTileOnDeviceDRAM<T>(device);
+  auto output_on_device_dram = CreateSingleTileOnDeviceDRAM<T>(device);
+
+  CreateCircularBufferOnDevice<T>(tt::CB::c_in0, program);
+
+  _SetDataMoveKernel(program, input_on_device_dram->address(),
+                     output_on_device_dram->address());
+
+  tt::tt_metal::EnqueueWriteBuffer(command_queue, input_on_device_dram,
+                                   input->GetVector().data(), false);
+  tt::tt_metal::EnqueueProgram(command_queue, program, false);
+  tt::tt_metal::EnqueueReadBuffer(command_queue, output_on_device_dram,
+                                  output->GetVector().data(), true);
+
+  bool pass = tt::tt_metal::CloseDevice(device);
+  return pass ? tiny::Result::kSuccess : tiny::Result::kFail;
+}
+
+} /* namespace */
+
+namespace tiny {
+
+template <>
+Result SingleTileLoopback<bfloat16>::Run() {
+  return _Run<bfloat16>(input_, output_);
+}
+
+template <>
+Result SingleTileLoopback<float>::Run() {
+  return _Run<float>(input_, output_);
+}
+
+} /* namespace tiny */

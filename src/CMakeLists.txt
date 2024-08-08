@@ -14,6 +14,8 @@ add_executable(tiny_tt_examples
     multicast_matmul.h
     simple_multicast.cpp
     simple_multicast.h
+    single_tile_loopback.cpp
+    single_tile_loopback.h
     conv.cpp
     conv.h
     main.cpp

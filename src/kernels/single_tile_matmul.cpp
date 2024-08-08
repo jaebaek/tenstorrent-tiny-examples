@@ -20,20 +20,25 @@
 namespace NAMESPACE {
 void MAIN {
   mm_init();
-  acquire_dst(tt::DstMode::Tile);
 
   cb_wait_front(tt::CB::c_in0, /* number of tiles */ 1);
   cb_wait_front(tt::CB::c_in1, /* number of tiles */ 1);
 
+  tile_regs_acquire();
+
   matmul_tiles(tt::CB::c_in0, tt::CB::c_in1, 0, 0, 0, false);
+
+  tile_regs_commit();
 
   cb_pop_front(tt::CB::c_in1, /* number of tiles */ 1);
   cb_pop_front(tt::CB::c_in0, /* number of tiles */ 1);
+
+  tile_regs_wait();
 
   cb_reserve_back(tt::CB::c_out0, /* number of tiles */ 1);
   pack_tile(0, tt::CB::c_out0);
   cb_push_back(tt::CB::c_out0, /* number of tiles */ 1);
 
-  release_dst(tt::DstMode::Tile);
+  tile_regs_release();
 }
 }  // namespace NAMESPACE

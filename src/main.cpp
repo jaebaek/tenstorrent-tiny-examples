@@ -24,6 +24,7 @@
 #include "matmul_cpu.h"
 #include "multicast_matmul.h"
 #include "simple_multicast.h"
+#include "single_tile_loopback.h"
 #include "single_tile_matmul.h"
 #include "tt_metal/common/bfloat16.hpp"
 #include "tt_metal/common/tilize_untilize.hpp"
@@ -140,6 +141,25 @@ bool IsErrorLargerThanThreshold<bfloat16>(
 }
 
 template <typename T>
+void TestSingleTileLoopback() {
+  const uint32_t number_of_elems = tiny::TileWidth() * tiny::TileHeight();
+  auto input = std::make_shared<tiny::Buffer<T>>(number_of_elems, 123);
+  auto output = std::make_shared<tiny::Buffer<T>>(number_of_elems);
+
+  tiny::SingleTileLoopback<T> single_tile_loopback;
+  single_tile_loopback.SetBuffers(input, output);
+  single_tile_loopback.Run();
+
+  bool pass = IsErrorLargerThanThreshold<T>(input, output, tiny::TileWidth(),
+                                            tiny::TileHeight());
+  if (pass) {
+    log_green("-- PASS: {} --", __FUNCTION__);
+  } else {
+    log_error("-- FAIL: {} --", __FUNCTION__);
+  }
+}
+
+template <typename T>
 void TestSingleTileMatrixMultiplication() {
   const uint32_t number_of_elems = tiny::TileWidth() * tiny::TileHeight();
   auto input0 = std::make_shared<tiny::Buffer<T>>(number_of_elems, 123);
@@ -185,7 +205,8 @@ void TestSimpleMulticast() {
   auto& input_vec = input->GetVector();
   auto& output_vec = output->GetVector();
   for (uint32_t i = 0; i < 8; ++i) {
-    std::cout << i << ": " << input_vec[i] << ", " << output_vec[i] << std::endl;
+    std::cout << i << ": " << input_vec[i] << ", " << output_vec[i]
+              << std::endl;
   }
   /*
   bool pass =
@@ -221,7 +242,8 @@ void TestSimpleMulticast<bfloat16>() {
   auto& input_vec = input->GetVector();
   auto& output_vec = output->GetVector();
   for (uint32_t i = 0; i < 8; ++i) {
-    std::cout << i << ": " << input_vec[i].to_float() << ", " << output_vec[i].to_float() << std::endl;
+    std::cout << i << ": " << input_vec[i].to_float() << ", "
+              << output_vec[i].to_float() << std::endl;
   }
 }
 
@@ -289,6 +311,14 @@ void TestConv() {
 } /* namespace */
 
 int main(int argc, const char* argv[]) {
+  try {
+    TestSingleTileLoopback<float>();
+  } catch (const std::exception& e) {
+    log_error("TestSingleTileLoopback::Run() failed with exception!");
+    log_error("{}", e.what());
+    throw;
+  }
+
   try {
     TestSingleTileMatrixMultiplication<bfloat16>();
   } catch (const std::exception& e) {
