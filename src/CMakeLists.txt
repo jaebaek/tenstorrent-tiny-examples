@@ -16,6 +16,8 @@ add_executable(tiny_tt_examples
     simple_multicast.h
     single_tile_loopback.cpp
     single_tile_loopback.h
+    single_tile_loopback_four_cores.cpp
+    single_tile_loopback_four_cores.h
     conv.cpp
     conv.h
     main.cpp

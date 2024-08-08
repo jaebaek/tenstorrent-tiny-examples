@@ -33,4 +33,11 @@ inline void log_green(const S& format_str, const Args&... args) {
             << std::endl;
 }
 
+template <typename S, typename... Args>
+inline void log_blue(const S& format_str, const Args&... args) {
+  std::cout << fmt::format(fmt::emphasis::bold | fg(fmt::color::blue),
+                           format_str, args...)
+            << std::endl;
+}
+
 #endif /* ifndef log_h_ */

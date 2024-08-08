@@ -25,6 +25,7 @@
 #include "multicast_matmul.h"
 #include "simple_multicast.h"
 #include "single_tile_loopback.h"
+#include "single_tile_loopback_four_cores.h"
 #include "single_tile_matmul.h"
 #include "tt_metal/common/bfloat16.hpp"
 #include "tt_metal/common/tilize_untilize.hpp"
@@ -152,6 +153,38 @@ void TestSingleTileLoopback() {
 
   bool pass = IsErrorLargerThanThreshold<T>(input, output, tiny::TileWidth(),
                                             tiny::TileHeight());
+  if (pass) {
+    log_green("-- PASS: {} --", __FUNCTION__);
+  } else {
+    log_error("-- FAIL: {} --", __FUNCTION__);
+  }
+}
+
+template <typename T>
+void TestSingleTileLoopbackFourCores() {
+  const uint32_t number_of_elems = tiny::TileWidth() * tiny::TileHeight();
+  auto input = std::make_shared<tiny::Buffer<T>>(number_of_elems, 123);
+  auto output = std::make_shared<tiny::Buffer<T>>(4 * number_of_elems);
+
+  tiny::SingleTileLoopbackFourCores<T> single_tile_loopback_four_cores;
+  single_tile_loopback_four_cores.SetBuffers(input, output);
+  single_tile_loopback_four_cores.Run();
+
+  bool pass = IsErrorLargerThanThreshold<T>(input, 0, number_of_elems, output,
+                                            0, number_of_elems);
+  if (pass) log_blue("Sender output matches", __FUNCTION__);
+  pass = pass &&
+         IsErrorLargerThanThreshold<T>(input, 0, number_of_elems, output,
+                                       number_of_elems, 2 * number_of_elems);
+  if (pass) log_blue("First receiver output matches", __FUNCTION__);
+  pass = pass && IsErrorLargerThanThreshold<T>(input, 0, number_of_elems,
+                                               output, 2 * number_of_elems,
+                                               3 * number_of_elems);
+  if (pass) log_blue("Second receiver output matches", __FUNCTION__);
+  pass = pass && IsErrorLargerThanThreshold<T>(input, 0, number_of_elems,
+                                               output, 3 * number_of_elems,
+                                               4 * number_of_elems);
+  if (pass) log_blue("Third receiver output matches", __FUNCTION__);
   if (pass) {
     log_green("-- PASS: {} --", __FUNCTION__);
   } else {
@@ -346,6 +379,14 @@ int main(int argc, const char* argv[]) {
     throw;
   }
 #endif
+
+  try {
+    TestSingleTileLoopbackFourCores<float>();
+  } catch (const std::exception& e) {
+    log_error("TestSingleTileLoopbackFourCores::Run() failed with exception!");
+    log_error("{}", e.what());
+    throw;
+  }
 
 #if 1
   try {
