@@ -19,36 +19,13 @@
 #include "tt_metal/common/bfloat16.hpp"
 #include "tt_metal/detail/tt_metal.hpp"
 #include "tt_metal/host_api.hpp"
+#include "utils.h"
 
 namespace {
 
 static const CoreRange kAllCores = {{0, 0}, {0, 3}};
 static const CoreCoord kSenderCore = {0, 0};
 static const CoreRange kReceiverCores = {{0, 1}, {0, 3}};
-
-template <typename T>
-std::shared_ptr<tt::tt_metal::Buffer> CreateSingleTileOnDeviceDRAM(
-    tt::tt_metal::Device* device, uint32_t size_in_bytes) {
-  tt::tt_metal::InterleavedBufferConfig device_dram_conf{
-      .device = device,
-      .size = size_in_bytes,
-      .page_size = tiny::SingleTileSize<T>(),
-      .buffer_type = tt::tt_metal::BufferType::DRAM};
-  return std::move(CreateBuffer(device_dram_conf));
-}
-
-template <typename T>
-void CreateCircularBufferOnDevice(
-    uint32_t circular_buffer_id, tt::tt_metal::Program& program,
-    const std::variant<CoreCoord, CoreRange, CoreRangeSet>& core_range) {
-  tt::DataFormat format = tiny::GetDataFormat<T>();
-  assert(format != tt::DataFormat::Invalid);
-
-  tt::tt_metal::CircularBufferConfig conf(tiny::SingleTileSize<T>(),
-                                          {{circular_buffer_id, format}});
-  conf = conf.set_page_size(circular_buffer_id, tiny::SingleTileSize<T>());
-  tt::tt_metal::CreateCircularBuffer(program, core_range, conf);
-}
 
 void _SetReaderKernel(tt::tt_metal::Program& program,
                       uint32_t receiver_sema_addr,
@@ -97,11 +74,11 @@ tiny::Result _Run(std::shared_ptr<tiny::Buffer<T>> input,
   tt::tt_metal::Program program{};
 
   auto input_on_device_dram =
-      CreateSingleTileOnDeviceDRAM<T>(device, input->GetSizeInBytes());
+      tiny::CreateBufferOnDeviceDRAM<T>(device, input->GetSizeInBytes());
   auto output_on_device_dram =
-      CreateSingleTileOnDeviceDRAM<T>(device, output->GetSizeInBytes());
+      tiny::CreateBufferOnDeviceDRAM<T>(device, output->GetSizeInBytes());
 
-  CreateCircularBufferOnDevice<T>(tt::CB::c_in0, program, kAllCores);
+  tiny::CreateCircularBufferOnDevice<T>(tt::CB::c_in0, program, kAllCores);
 
   auto receiver_sema_addr =
       tt::tt_metal::CreateSemaphore(program, kAllCores, 0);

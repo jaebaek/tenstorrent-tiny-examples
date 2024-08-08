@@ -25,45 +25,6 @@ namespace {
 
 static const uint32_t kSingleTileSize = tiny::SingleTileSize<bfloat16>();
 
-template <typename T>
-std::shared_ptr<tt::tt_metal::Buffer> CreateBufferOnDeviceDRAM(
-    tt::tt_metal::Device* device, uint64_t size_in_bytes) {
-  tt::tt_metal::InterleavedBufferConfig device_dram_conf{
-      .device = device,
-      .size = size_in_bytes,
-      .page_size = tiny::SingleTileSize<T>(),
-      .buffer_type = tt::tt_metal::BufferType::DRAM};
-  return std::move(CreateBuffer(device_dram_conf));
-}
-
-template <typename T>
-void CreateCircularBufferOnDevice(uint32_t circular_buffer_id,
-                                  tt::tt_metal::Program& program,
-                                  CoreRange all_cores) {
-  tt::DataFormat format = tiny::GetDataFormat<T>();
-  assert(format != tt::DataFormat::Invalid);
-
-  tt::tt_metal::CircularBufferConfig conf(tiny::SingleTileSize<T>(),
-                                          {{circular_buffer_id, format}});
-  conf = conf.set_page_size(circular_buffer_id, tiny::SingleTileSize<T>());
-  tt::tt_metal::CreateCircularBuffer(program, all_cores, conf);
-}
-
-template <typename T>
-void CreateCircularBufferOnDevice(uint32_t circular_buffer_id,
-                                  tt::tt_metal::Program& program,
-                                  CoreRange all_cores,
-                                  uint32_t number_of_tiles) {
-  tt::DataFormat format = tiny::GetDataFormat<T>();
-  assert(format != tt::DataFormat::Invalid);
-
-  tt::tt_metal::CircularBufferConfig conf(
-      number_of_tiles * tiny::SingleTileSize<T>(),
-      {{circular_buffer_id, format}});
-  conf = conf.set_page_size(circular_buffer_id, tiny::SingleTileSize<T>());
-  tt::tt_metal::CreateCircularBuffer(program, all_cores, conf);
-}
-
 void SetReaderKernel(tt::tt_metal::Program& program, CoreCoord core_grid,
                      uint32_t input0_device_dram_address,
                      uint32_t input1_device_dram_address,
@@ -152,16 +113,16 @@ tiny::Result _Run(tt::tt_metal::Device* device,
   auto all_cores = CoreRange({0, 0}, {core_grid.x - 1, core_grid.y - 1});
 
   auto input0_on_device_dram =
-      CreateBufferOnDeviceDRAM<T>(device, input0->GetSizeInBytes());
+      tiny::CreateBufferOnDeviceDRAM<T>(device, input0->GetSizeInBytes());
   auto input1_on_device_dram =
-      CreateBufferOnDeviceDRAM<T>(device, input0->GetSizeInBytes());
+      tiny::CreateBufferOnDeviceDRAM<T>(device, input0->GetSizeInBytes());
   auto output_on_device_dram =
-      CreateBufferOnDeviceDRAM<T>(device, output->GetSizeInBytes());
+      tiny::CreateBufferOnDeviceDRAM<T>(device, output->GetSizeInBytes());
 
-  CreateCircularBufferOnDevice<T>(tt::CB::c_in0, program, all_cores);
-  CreateCircularBufferOnDevice<T>(tt::CB::c_in1, program, all_cores);
-  CreateCircularBufferOnDevice<T>(tt::CB::c_in2, program, all_cores);
-  CreateCircularBufferOnDevice<T>(tt::CB::c_out0, program, all_cores);
+  tiny::CreateCircularBufferOnDevice<T>(tt::CB::c_in0, program, all_cores);
+  tiny::CreateCircularBufferOnDevice<T>(tt::CB::c_in1, program, all_cores);
+  tiny::CreateCircularBufferOnDevice<T>(tt::CB::c_in2, program, all_cores);
+  tiny::CreateCircularBufferOnDevice<T>(tt::CB::c_out0, program, all_cores);
 
   auto receiver_sema_addr =
       tt::tt_metal::CreateSemaphore(program, all_cores, 0);

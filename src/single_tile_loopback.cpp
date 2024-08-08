@@ -29,29 +29,6 @@ namespace {
 
 static const CoreCoord kSingleTileLoopbackCore = {0, 0};
 
-template <typename T>
-std::shared_ptr<tt::tt_metal::Buffer> CreateSingleTileOnDeviceDRAM(
-    tt::tt_metal::Device* device) {
-  tt::tt_metal::InterleavedBufferConfig single_tile_device_dram_conf{
-      .device = device,
-      .size = tiny::SingleTileSize<T>(),
-      .page_size = tiny::SingleTileSize<T>(),
-      .buffer_type = tt::tt_metal::BufferType::DRAM};
-  return std::move(CreateBuffer(single_tile_device_dram_conf));
-}
-
-template <typename T>
-void CreateCircularBufferOnDevice(uint32_t circular_buffer_id,
-                                  tt::tt_metal::Program& program) {
-  tt::DataFormat format = tiny::GetDataFormat<T>();
-  assert(format != tt::DataFormat::Invalid);
-
-  tt::tt_metal::CircularBufferConfig conf(tiny::SingleTileSize<T>(),
-                                          {{circular_buffer_id, format}});
-  conf = conf.set_page_size(circular_buffer_id, tiny::SingleTileSize<T>());
-  tt::tt_metal::CreateCircularBuffer(program, kSingleTileLoopbackCore, conf);
-}
-
 void _SetDataMoveKernel(tt::tt_metal::Program& program,
                         uint32_t input_device_dram_address,
                         uint32_t output_device_dram_address) {
@@ -76,10 +53,11 @@ tiny::Result _Run(std::shared_ptr<tiny::Buffer<T>> input,
   tt::tt_metal::CommandQueue& command_queue = device->command_queue();
   tt::tt_metal::Program program{};
 
-  auto input_on_device_dram = CreateSingleTileOnDeviceDRAM<T>(device);
-  auto output_on_device_dram = CreateSingleTileOnDeviceDRAM<T>(device);
+  auto input_on_device_dram = tiny::CreateSingleTileOnDeviceDRAM<T>(device);
+  auto output_on_device_dram = tiny::CreateSingleTileOnDeviceDRAM<T>(device);
 
-  CreateCircularBufferOnDevice<T>(tt::CB::c_in0, program);
+  tiny::CreateCircularBufferOnDevice<T>(tt::CB::c_in0, program,
+                                        kSingleTileLoopbackCore);
 
   _SetDataMoveKernel(program, input_on_device_dram->address(),
                      output_on_device_dram->address());
