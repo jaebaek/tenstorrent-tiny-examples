@@ -227,56 +227,33 @@ void TestSingleTileMatrixMultiplication() {
 
 template <typename T>
 void TestSimpleMulticast() {
-  const uint32_t tile_size = tiny::TileWidth() * tiny::TileHeight();
-  auto input = std::make_shared<tiny::Buffer<T>>(tile_size, 123);
-  auto output = std::make_shared<tiny::Buffer<T>>(4 * tile_size);
+  const uint32_t number_of_elems = tiny::TileWidth() * tiny::TileHeight();
+  auto input = std::make_shared<tiny::Buffer<T>>(number_of_elems, 123);
+  auto output = std::make_shared<tiny::Buffer<T>>(4 * number_of_elems);
 
   tiny::SimpleMulticast<T> simple_multicast;
   simple_multicast.SetBuffers(input, output);
   simple_multicast.Run();
 
-  auto& input_vec = input->GetVector();
-  auto& output_vec = output->GetVector();
-  for (uint32_t i = 0; i < 8; ++i) {
-    std::cout << i << ": " << input_vec[i] << ", " << output_vec[i]
-              << std::endl;
-  }
-  /*
-  bool pass =
-      IsErrorLargerThanThreshold<T>(input, 0, tile_size, output, 0, tile_size);
-  if (pass) log_green("-- Sender output matches --", __FUNCTION__);
-  pass = pass && IsErrorLargerThanThreshold<T>(input, 0, tile_size, output,
-                                               tile_size, 2 * tile_size);
-  if (pass) log_green("-- First receiver output matches --", __FUNCTION__);
-  pass = pass && IsErrorLargerThanThreshold<T>(input, 0, tile_size, output,
-                                               2 * tile_size, 3 * tile_size);
-  if (pass) log_green("-- Second receiver output matches --", __FUNCTION__);
-  pass = pass && IsErrorLargerThanThreshold<T>(input, 0, tile_size, output,
-                                               3 * tile_size, 4 * tile_size);
-  if (pass) log_green("-- Third receiver output matches --", __FUNCTION__);
+  bool pass = IsErrorLargerThanThreshold<T>(input, 0, number_of_elems, output,
+                                            0, number_of_elems);
+  if (pass) log_blue("Sender output matches", __FUNCTION__);
+  pass = pass &&
+         IsErrorLargerThanThreshold<T>(input, 0, number_of_elems, output,
+                                       number_of_elems, 2 * number_of_elems);
+  if (pass) log_blue("First receiver output matches", __FUNCTION__);
+  pass = pass && IsErrorLargerThanThreshold<T>(input, 0, number_of_elems,
+                                               output, 2 * number_of_elems,
+                                               3 * number_of_elems);
+  if (pass) log_blue("Second receiver output matches", __FUNCTION__);
+  pass = pass && IsErrorLargerThanThreshold<T>(input, 0, number_of_elems,
+                                               output, 3 * number_of_elems,
+                                               4 * number_of_elems);
+  if (pass) log_blue("Third receiver output matches", __FUNCTION__);
   if (pass) {
     log_green("-- PASS: {} --", __FUNCTION__);
   } else {
     log_error("-- FAIL: {} --", __FUNCTION__);
-  }
-  */
-}
-
-template <>
-void TestSimpleMulticast<bfloat16>() {
-  const uint32_t tile_size = tiny::TileWidth() * tiny::TileHeight();
-  auto input = std::make_shared<tiny::Buffer<bfloat16>>(tile_size, 123);
-  auto output = std::make_shared<tiny::Buffer<bfloat16>>(4 * tile_size);
-
-  tiny::SimpleMulticast<bfloat16> simple_multicast;
-  simple_multicast.SetBuffers(input, output);
-  simple_multicast.Run();
-
-  auto& input_vec = input->GetVector();
-  auto& output_vec = output->GetVector();
-  for (uint32_t i = 0; i < 8; ++i) {
-    std::cout << i << ": " << input_vec[i].to_float() << ", "
-              << output_vec[i].to_float() << std::endl;
   }
 }
 

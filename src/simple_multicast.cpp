@@ -27,10 +27,10 @@ static const CoreRange kAllCores = {{0, 0}, {0, 3}};
 static const CoreCoord kSenderCore = {0, 0};
 static const CoreRange kReceiverCores = {{0, 1}, {0, 3}};
 
-void _SetReaderKernel(tt::tt_metal::Program& program,
-                      uint32_t receiver_sema_addr,
-                      uint32_t input_device_dram_address,
-                      uint32_t output_device_dram_address) {
+void _SetDataMoveKernel(tt::tt_metal::Program& program,
+                        uint32_t input_device_dram_address,
+                        uint32_t receiver_sema_addr,
+                        uint32_t output_device_dram_address) {
   auto sender_id = tt::tt_metal::CreateKernel(
       program, "../../src/kernels/simple_multicast_sender_reader.cpp",
       kSenderCore,
@@ -46,8 +46,8 @@ void _SetReaderKernel(tt::tt_metal::Program& program,
       program, "../../src/kernels/simple_multicast_receiver_reader.cpp",
       kReceiverCores,
       tt::tt_metal::DataMovementConfig{
-          .processor = tt::tt_metal::DataMovementProcessor::RISCV_0,
-          .noc = NOC::RISCV_0_default});
+          .processor = tt::tt_metal::DataMovementProcessor::RISCV_1,
+          .noc = NOC::RISCV_1_default});
 
   for (uint32_t i = 1; i < 4; ++i) {
     CoreCoord core = {0, i};
@@ -55,14 +55,6 @@ void _SetReaderKernel(tt::tt_metal::Program& program,
         program, receiver_id, core,
         {i, receiver_sema_addr, output_device_dram_address});
   }
-}
-
-void _SetKernels(tt::tt_metal::Program& program,
-                 uint32_t input_device_dram_address,
-                 uint32_t receiver_sema_addr,
-                 uint32_t output_device_dram_address) {
-  _SetReaderKernel(program, input_device_dram_address, receiver_sema_addr,
-                   output_device_dram_address);
 }
 
 template <typename T>
@@ -83,8 +75,8 @@ tiny::Result _Run(std::shared_ptr<tiny::Buffer<T>> input,
   auto receiver_sema_addr =
       tt::tt_metal::CreateSemaphore(program, kAllCores, 0);
 
-  _SetKernels(program, input_on_device_dram->address(), receiver_sema_addr,
-              output_on_device_dram->address());
+  _SetDataMoveKernel(program, input_on_device_dram->address(),
+                     receiver_sema_addr, output_on_device_dram->address());
 
   tt::tt_metal::EnqueueWriteBuffer(command_queue, input_on_device_dram,
                                    input->GetVector().data(), false);

@@ -17,7 +17,7 @@
 #include "dataflow_api.h"
 #include "debug/dprint.h"
 
-#define TINY_DEBUG 1
+#define TINY_DEBUG 0
 
 #if TINY_DEBUG
 #define LOG(X) DPRINT_DATA1(X)
@@ -49,7 +49,7 @@ void kernel_main() {
   // Read a single tile from DRAM |input_dram_addr| to circular buffer in0.
   cb_reserve_back(tt::CB::c_in0, /* number of tiles */ 1);
   uint32_t L1_write_addr_in0 = get_write_ptr(tt::CB::c_in0);
-  bank_for_input.noc_async_read_tile(0, L1_write_addr_in0);
+  noc_async_read_tile(0, bank_for_input, L1_write_addr_in0);
   noc_async_read_barrier();
 
 #if TINY_DEBUG
@@ -76,7 +76,7 @@ void kernel_main() {
   ptr = reinterpret_cast<volatile tt_l1_ptr float*>(L1_read_addr_in0 + 4);
   LOG(DPRINT << *ptr << ENDL());
 #endif
-  bank_for_output.noc_async_write_tile(0, L1_read_addr_in0);
+  noc_async_write_tile(0, bank_for_output, L1_read_addr_in0);
   noc_async_write_barrier();
 
   cb_push_back(tt::CB::c_in0, /* number of tiles */ 1);
