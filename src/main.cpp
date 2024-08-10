@@ -26,6 +26,7 @@
 #include "conv.h"
 #include "log.h"
 #include "matmul_cpu.h"
+#include "multicast_advanced.h"
 #include "multicast_matmul.h"
 #include "tt_metal/common/bfloat16.hpp"
 #include "tt_metal/common/tilize_untilize.hpp"
@@ -318,6 +319,30 @@ void TestConv() {
   cpu_conv.Run();
 }
 
+template <typename T>
+void TestMulticastAdvanced() {
+  tt::tt_metal::Device* device = tt::tt_metal::CreateDevice(0);
+  tiny::MulticastAdvanced<T> multicast_advanced(device);
+  auto core_grid = device->compute_with_storage_grid_size();
+  uint32_t num_cores = core_grid.x * core_grid.y;
+
+  const uint32_t number_of_input_elems =
+      num_cores * tiny::TileWidth() * tiny::TileHeight();
+  auto input = std::make_shared<tiny::Buffer<T>>(number_of_input_elems, 123);
+  auto output =
+      std::make_shared<tiny::Buffer<T>>(num_cores * number_of_input_elems);
+
+  multicast_advanced.SetBuffers(input, output);
+  multicast_advanced.Run();
+
+  bool pass = tt::tt_metal::CloseDevice(device);
+  if (pass) {
+    log_green("-- PASS: {} --", __FUNCTION__);
+  } else {
+    log_error("-- FAIL: {} --", __FUNCTION__);
+  }
+}
+
 } /* namespace */
 
 int main(int argc, const char* argv[]) {
@@ -330,15 +355,8 @@ int main(int argc, const char* argv[]) {
   }
 
   try {
-    TestSingleTileMatrixMultiplication<bfloat16>();
-  } catch (const std::exception& e) {
-    log_error("SingleTileMatrixMultiplication::Run() failed with exception!");
-    log_error("{}", e.what());
-    throw;
-  }
-
-  try {
     TestSingleTileMatrixMultiplication<float>();
+    TestSingleTileMatrixMultiplication<bfloat16>();
   } catch (const std::exception& e) {
     log_error("SingleTileMatrixMultiplication::Run() failed with exception!");
     log_error("{}", e.what());
@@ -367,6 +385,14 @@ int main(int argc, const char* argv[]) {
   try {
     TestSimpleMulticast<float>();
     TestSimpleMulticast<bfloat16>();
+  } catch (const std::exception& e) {
+    log_error("TestSimpleMulticast::Run() for float failed with exception!");
+    log_error("{}", e.what());
+    throw;
+  }
+
+  try {
+    TestMulticastAdvanced<float>();
   } catch (const std::exception& e) {
     log_error("TestSimpleMulticast::Run() for float failed with exception!");
     log_error("{}", e.what());

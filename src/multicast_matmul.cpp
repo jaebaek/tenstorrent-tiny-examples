@@ -115,7 +115,7 @@ tiny::Result _Run(tt::tt_metal::Device* device,
   auto input0_on_device_dram =
       tiny::CreateBufferOnDeviceDRAM<T>(device, input0->GetSizeInBytes());
   auto input1_on_device_dram =
-      tiny::CreateBufferOnDeviceDRAM<T>(device, input0->GetSizeInBytes());
+      tiny::CreateBufferOnDeviceDRAM<T>(device, input1->GetSizeInBytes());
   auto output_on_device_dram =
       tiny::CreateBufferOnDeviceDRAM<T>(device, output->GetSizeInBytes());
 

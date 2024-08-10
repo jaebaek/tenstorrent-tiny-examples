@@ -10,6 +10,8 @@ add_executable(tiny_tt_examples
     utils.h
     matmul_cpu.cpp
     matmul_cpu.h
+    multicast_advanced.cpp
+    multicast_advanced.h
     multicast_matmul.cpp
     multicast_matmul.h
     3_simple_multicast/simple_multicast.cpp
