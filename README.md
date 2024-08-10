@@ -30,7 +30,7 @@ $ ./bin/tiny_tt_examples
 ### Code format
 
 ```
-$ clang-format -style=file -i [modified-files]
+$ find ./src/ -name "*.h" -or -name "*.cpp" -exec  clang-format -style=file -i {} \;
 ```
 
 # Memo (about important concepts)
@@ -117,13 +117,14 @@ The untilization is the opposite conversion.
 
 ### Matrix multiplication
 
-`src/single_tile_matmul.cpp` implements a matrix multiplication between two tiles.
-It uses a single Tensix core `{0, 0}`. `src/kernels/single_tile_matmul_reader.cpp`
+`src/4_single_tile_matmul/single_tile_matmul.cpp` implements a matrix
+multiplication between two tiles.  It uses a single Tensix core `{0, 0}`.
+`src/4_single_tile_matmul/kernels/single_tile_matmul_reader.cpp`
 reads two input matrices from device DRAM and passes them to `CB::c_in0` and
 `CB::c_in1` buffers that are on L1 cache.
 
-On its compute kernel `src/kernels/single_tile_matmul.cpp`, it uses
-`matmul_tiles(..)` that conducts `DST = A * B` like
+On its compute kernel `src/4_single_tile_matmul/kernels/single_tile_matmul.cpp`,
+it uses `matmul_tiles(..)` that conducts `DST = A * B` like
 `DST = tile on CB::c_in0 * tile on CB::c_in1`.
 
 Note that it uses `DST`, so we have to `acquire_dst(..)` and `release_dst(..)`.

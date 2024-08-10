@@ -33,7 +33,8 @@ void _SetDataMoveKernel(tt::tt_metal::Program& program,
                         uint32_t input_device_dram_address,
                         uint32_t output_device_dram_address) {
   auto reader_id = tt::tt_metal::CreateKernel(
-      program, "../../src/kernels/single_tile_loopback.cpp",
+      program,
+      "../../src/1_single_tile_loopback/kernels/single_tile_loopback.cpp",
       kSingleTileLoopbackCore,
       tt::tt_metal::DataMovementConfig{
           .processor = tt::tt_metal::DataMovementProcessor::RISCV_1,

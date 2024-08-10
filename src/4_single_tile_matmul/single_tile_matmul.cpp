@@ -33,7 +33,8 @@ void _SetReaderKernel(tt::tt_metal::Program& program,
                       uint32_t input0_device_dram_address,
                       uint32_t input1_device_dram_address) {
   auto reader_id = tt::tt_metal::CreateKernel(
-      program, "../../src/kernels/single_tile_matmul_reader.cpp",
+      program,
+      "../../src/4_single_tile_matmul/kernels/single_tile_matmul_reader.cpp",
       kSingleTileMatmulCore,
       tt::tt_metal::DataMovementConfig{
           .processor = tt::tt_metal::DataMovementProcessor::RISCV_1,
@@ -47,7 +48,8 @@ void _SetReaderKernel(tt::tt_metal::Program& program,
 void _SetWriteKernel(tt::tt_metal::Program& program,
                      uint32_t output_device_dram_address) {
   auto writer_id = tt::tt_metal::CreateKernel(
-      program, "../../src/kernels/single_tile_matmul_writer.cpp",
+      program,
+      "../../src/4_single_tile_matmul/kernels/single_tile_matmul_writer.cpp",
       kSingleTileMatmulCore,
       tt::tt_metal::DataMovementConfig{
           .processor = tt::tt_metal::DataMovementProcessor::RISCV_0,
@@ -59,7 +61,7 @@ void _SetWriteKernel(tt::tt_metal::Program& program,
 
 void _SetComputeKernel(tt::tt_metal::Program& program) {
   tt::tt_metal::CreateKernel(
-      program, "../../src/kernels/single_tile_matmul.cpp",
+      program, "../../src/4_single_tile_matmul/kernels/single_tile_matmul.cpp",
       kSingleTileMatmulCore,
       tt::tt_metal::ComputeConfig{.math_fidelity = MathFidelity::HiFi4});
 }

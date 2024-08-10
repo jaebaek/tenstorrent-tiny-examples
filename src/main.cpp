@@ -18,15 +18,15 @@
 #include <memory>
 #include <vector>
 
+#include "1_single_tile_loopback/single_tile_loopback.h"
+#include "2_single_tile_loopback_four_cores/single_tile_loopback_four_cores.h"
+#include "3_simple_multicast/simple_multicast.h"
+#include "4_single_tile_matmul/single_tile_matmul.h"
 #include "buffer.h"
 #include "conv.h"
 #include "log.h"
 #include "matmul_cpu.h"
 #include "multicast_matmul.h"
-#include "simple_multicast.h"
-#include "single_tile_loopback.h"
-#include "single_tile_loopback_four_cores.h"
-#include "single_tile_matmul.h"
 #include "tt_metal/common/bfloat16.hpp"
 #include "tt_metal/common/tilize_untilize.hpp"
 #include "utils.h"
@@ -345,8 +345,7 @@ int main(int argc, const char* argv[]) {
     throw;
   }
 
-  // This multi-cast example is not working. Will revisit this later.
-#if 0
+#if 0  // This multi-cast example is not working. Will revisit this later.
   try {
     TestMulticastMatrixMultiplication<float>();
   } catch (const std::exception& e) {
@@ -365,7 +364,6 @@ int main(int argc, const char* argv[]) {
     throw;
   }
 
-#if 1
   try {
     TestSimpleMulticast<float>();
     TestSimpleMulticast<bfloat16>();
@@ -374,8 +372,9 @@ int main(int argc, const char* argv[]) {
     log_error("{}", e.what());
     throw;
   }
-#endif
 
+#if 0  // WIP
   TestConv<float>();
+#endif
   return 0;
 }

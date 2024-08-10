@@ -32,7 +32,8 @@ void _SetDataMoveKernel(tt::tt_metal::Program& program,
                         uint32_t receiver_sema_addr,
                         uint32_t output_device_dram_address) {
   auto sender_id = tt::tt_metal::CreateKernel(
-      program, "../../src/kernels/simple_multicast_sender_reader.cpp",
+      program,
+      "../../src/3_simple_multicast/kernels/simple_multicast_sender_reader.cpp",
       kSenderCore,
       tt::tt_metal::DataMovementConfig{
           .processor = tt::tt_metal::DataMovementProcessor::RISCV_1,
@@ -43,7 +44,9 @@ void _SetDataMoveKernel(tt::tt_metal::Program& program,
                                 output_device_dram_address});
 
   auto receiver_id = tt::tt_metal::CreateKernel(
-      program, "../../src/kernels/simple_multicast_receiver_reader.cpp",
+      program,
+      "../../src/3_simple_multicast/kernels/"
+      "simple_multicast_receiver_reader.cpp",
       kReceiverCores,
       tt::tt_metal::DataMovementConfig{
           .processor = tt::tt_metal::DataMovementProcessor::RISCV_1,
