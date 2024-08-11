@@ -346,6 +346,13 @@ void TestMulticastAdvanced() {
   }
 
   bool pass = tt::tt_metal::CloseDevice(device);
+  for (uint32_t i = 0; i < num_cores; ++i) {
+    pass =
+        pass && IsErrorLargerThanThreshold<T>(input, 0, number_of_input_elems,
+                                              output, i * number_of_input_elems,
+                                              (i + 1) * number_of_input_elems);
+    if (pass) log_blue("Partial output matches", __FUNCTION__);
+  }
   if (pass) {
     log_green("-- PASS: {} --", __FUNCTION__);
   } else {

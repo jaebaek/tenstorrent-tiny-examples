@@ -51,30 +51,25 @@ static void init_physical_cores(const uint32_t start_arg_index) {
   physical_core_y_end = PHYSICAL_CORES_Y[core_grid_y - 1];
 }
 
-static inline void send(uint32_t input_dram_addr, uint32_t receiver_sema_addr,
-                        uint32_t output_dram_addr) {
-  const InterleavedAddrGenFast</* From DRAM address */ true> bank_for_input = {
-      .bank_base_address = input_dram_addr,
-      .page_size = tile_size_in_bytes,
-      .data_format = format};
-
+static inline void send(uint32_t core_id, uint32_t L1_write_addr_in0,
+                        uint32_t L1_write_addr_in1, uint32_t receiver_sema_addr,
+                        uint32_t sender_sema_addr, uint32_t output_dram_addr) {
   const InterleavedAddrGenFast</* From DRAM address */ true> bank_for_output = {
       .bank_base_address = output_dram_addr,
       .page_size = tile_size_in_bytes,
       .data_format = format};
 
-  // Read a single tile from DRAM |input_dram_addr| to circular buffer in0.
-  cb_reserve_back(tt::CB::c_in0, /* number of tiles */ 1);
-  uint32_t L1_write_addr_in0 = get_write_ptr(tt::CB::c_in0);
-  noc_async_read_tile(0, bank_for_input, L1_write_addr_in0);
-  noc_async_read_barrier();
-
 #if TINY_DEBUG
   LOG(DPRINT << TSLICE(tt::CB::c_in0, 0, hw_all()) << ENDL());
 #endif
 
+  volatile tt_l1_ptr uint32_t* sender_sema_addr_ptr =
+      reinterpret_cast<volatile tt_l1_ptr uint32_t*>(sender_sema_addr);
+  noc_semaphore_wait(sender_sema_addr_ptr, number_of_cores - 1);
+  noc_semaphore_set(sender_sema_addr_ptr, 0);
+
   uint64_t multicast_dst_noc_addr = get_noc_multicast_addr(
-      physical_core_x_end, physical_core_y_end, 1, 1, L1_write_addr_in0);
+      physical_core_x_end, physical_core_y_end, 1, 1, L1_write_addr_in1);
   noc_async_write_multicast(L1_write_addr_in0, multicast_dst_noc_addr,
                             tile_size_in_bytes, number_of_cores);
 
@@ -93,45 +88,54 @@ static inline void send(uint32_t input_dram_addr, uint32_t receiver_sema_addr,
   ptr = reinterpret_cast<volatile tt_l1_ptr float*>(L1_read_addr_in0 + 4);
   LOG(DPRINT << *ptr << ENDL());
 #endif
-  LOG(DPRINT << "[READER] output_dram_addr = " << output_dram_addr << ENDL());
-  noc_async_write_tile(0, bank_for_output, L1_read_addr_in0);
+  LOG(DPRINT << "[READER] write to " << (core_id * number_of_cores + core_id)
+             << ENDL());
+  noc_async_write_tile(core_id * number_of_cores + core_id, bank_for_output,
+                       L1_read_addr_in0);
   noc_async_writes_flushed();
 
-  cb_push_back(tt::CB::c_in0, /* number of tiles */ 1);
   LOG(DPRINT << "[READER] done" << ENDL());
 }
 
 static inline void receive(uint32_t core_id, uint32_t receiver_sema_addr,
-                           uint32_t output_dram_addr) {
-  const uint32_t tile_size_in_bytes = get_tile_size(tt::CB::c_in0);
-  const DataFormat format = get_dataformat(tt::CB::c_in0);
+                           uint32_t sender_sema_addr, uint32_t output_dram_addr,
+                           uint32_t sender) {
   const InterleavedAddrGenFast</* From DRAM address */ true> bank_for_output = {
       .bank_base_address = output_dram_addr,
       .page_size = tile_size_in_bytes,
       .data_format = format};
 
-  cb_reserve_back(tt::CB::c_in0, /* number of tiles */ 1);
+  uint32_t sender_noc_x = PHYSICAL_CORES_X[sender % core_grid_x];
+  uint32_t sender_noc_y = PHYSICAL_CORES_Y[sender / core_grid_x];
+  LOG(DPRINT << "[READER] sender_noc_x=" << sender_noc_x << ", "
+             << " sender_noc_y=" << sender_noc_y << ENDL());
+  uint64_t sender_sema_noc_addr =
+      get_noc_addr(sender_noc_x, sender_noc_y, sender_sema_addr);
+  noc_semaphore_inc(sender_sema_noc_addr, 1);
+
   volatile tt_l1_ptr uint32_t* receiver_sema_addr_ptr =
       reinterpret_cast<volatile tt_l1_ptr uint32_t*>(receiver_sema_addr);
   noc_semaphore_wait(receiver_sema_addr_ptr, 1);
+  noc_semaphore_set(receiver_sema_addr_ptr, 0);
 
 #if TINY_DEBUG
-  LOG(DPRINT << TSLICE(tt::CB::c_in0, 0, hw_all()) << ENDL());
+  LOG(DPRINT << TSLICE(tt::CB::c_in1, 0, hw_all()) << ENDL());
 #endif
 
-  uint32_t L1_read_addr_in0 = get_read_ptr(tt::CB::c_in0);
+  uint32_t L1_read_addr_in1 = get_read_ptr(tt::CB::c_in1);
 #if TINY_DEBUG
   volatile tt_l1_ptr float* ptr =
-      reinterpret_cast<volatile tt_l1_ptr float*>(L1_read_addr_in0);
+      reinterpret_cast<volatile tt_l1_ptr float*>(L1_read_addr_in1);
   LOG(DPRINT << *ptr << ENDL());
-  ptr = reinterpret_cast<volatile tt_l1_ptr float*>(L1_read_addr_in0 + 4);
+  ptr = reinterpret_cast<volatile tt_l1_ptr float*>(L1_read_addr_in1 + 4);
   LOG(DPRINT << *ptr << ENDL());
 #endif
-  LOG(DPRINT << "[READER] output_dram_addr = " << output_dram_addr << ENDL());
-  noc_async_write_tile(core_id, bank_for_output, L1_read_addr_in0);
+  LOG(DPRINT << "[READER] write to " << (core_id * number_of_cores + sender)
+             << ENDL());
+  noc_async_write_tile(core_id * number_of_cores + sender, bank_for_output,
+                       L1_read_addr_in1);
   noc_async_writes_flushed();
 
-  cb_push_back(tt::CB::c_in0, /* number of tiles */ 1);
   LOG(DPRINT << "[READER] done" << ENDL());
 }
 
@@ -145,9 +149,30 @@ void kernel_main() {
   LOG(DPRINT << "[READER] receiver_sema_addr=" << receiver_sema_addr << ENDL());
   LOG(DPRINT << "[READER] sender_sema_addr=" << sender_sema_addr << ENDL());
 
-  if (core_id == 0) {
-    send(input_dram_addr, receiver_sema_addr, output_dram_addr);
-  } else {
-    receive(core_id, receiver_sema_addr, output_dram_addr);
+  const InterleavedAddrGenFast</* From DRAM address */ true> bank_for_input = {
+      .bank_base_address = input_dram_addr,
+      .page_size = tile_size_in_bytes,
+      .data_format = format};
+
+  cb_reserve_back(tt::CB::c_in0, /* number of tiles */ 1);
+  // Read a single tile from DRAM |input_dram_addr| to circular buffer in0.
+  uint32_t L1_write_addr_in0 = get_write_ptr(tt::CB::c_in0);
+  noc_async_read_tile(core_id, bank_for_input, L1_write_addr_in0);
+  noc_async_read_barrier();
+
+  cb_reserve_back(tt::CB::c_in1, /* number of tiles */ 1);
+  uint32_t L1_write_addr_in1 = get_write_ptr(tt::CB::c_in1);
+
+  for (uint32_t i = 0; i < number_of_cores; ++i) {
+    if (i == core_id) {
+      send(core_id, L1_write_addr_in0, L1_write_addr_in1, receiver_sema_addr,
+           sender_sema_addr, output_dram_addr);
+    } else {
+      receive(core_id, receiver_sema_addr, sender_sema_addr, output_dram_addr,
+              i);
+    }
   }
+
+  cb_push_back(tt::CB::c_in1, /* number of tiles */ 1);
+  cb_push_back(tt::CB::c_in0, /* number of tiles */ 1);
 }
