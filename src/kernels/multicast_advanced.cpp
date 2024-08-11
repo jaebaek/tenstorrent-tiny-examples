@@ -25,11 +25,19 @@
 #define LOG(X)
 #endif
 
+static inline SliceRange hw_all() {
+  return SliceRange{.h0 = 0, .h1 = 32, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1};
+}
+
 constexpr uint32_t core_grid_x = get_compile_time_arg_val(0);
 constexpr uint32_t core_grid_y = get_compile_time_arg_val(1);
 constexpr uint32_t number_of_cores = core_grid_x * core_grid_y;
 uint32_t PHYSICAL_CORES_X[core_grid_x];
 uint32_t PHYSICAL_CORES_Y[core_grid_y];
+uint32_t physical_core_x_end, physical_core_y_end;
+
+constexpr uint32_t tile_size_in_bytes = get_tile_size(tt::CB::c_in0);
+constexpr DataFormat format = get_dataformat(tt::CB::c_in0);
 
 static void init_physical_cores(const uint32_t start_arg_index) {
   for (uint32_t i = 0; i < core_grid_x; ++i) {
@@ -39,18 +47,12 @@ static void init_physical_cores(const uint32_t start_arg_index) {
     PHYSICAL_CORES_Y[i] =
         get_arg_val<uint32_t>(start_arg_index + core_grid_x + i);
   }
+  physical_core_x_end = PHYSICAL_CORES_X[core_grid_x - 1];
+  physical_core_y_end = PHYSICAL_CORES_Y[core_grid_y - 1];
 }
 
-void kernel_main() {
-  uint32_t core_id = get_arg_val<uint32_t>(0);
-  uint32_t input_dram_addr = get_arg_val<uint32_t>(1);
-  uint32_t receiver_sema_addr = get_arg_val<uint32_t>(2);
-  uint32_t sender_sema_addr = get_arg_val<uint32_t>(3);
-  uint32_t output_dram_addr = get_arg_val<uint32_t>(4);
-  init_physical_cores(5);
-
-  const uint32_t tile_size_in_bytes = get_tile_size(tt::CB::c_in0);
-  const DataFormat format = get_dataformat(tt::CB::c_in0);
+static inline void send(uint32_t input_dram_addr, uint32_t receiver_sema_addr,
+                        uint32_t output_dram_addr) {
   const InterleavedAddrGenFast</* From DRAM address */ true> bank_for_input = {
       .bank_base_address = input_dram_addr,
       .page_size = tile_size_in_bytes,
@@ -61,119 +63,91 @@ void kernel_main() {
       .page_size = tile_size_in_bytes,
       .data_format = format};
 
-  // Read a single tile from DRAM |input0_dram_addr| to circular buffer in0.
+  // Read a single tile from DRAM |input_dram_addr| to circular buffer in0.
   cb_reserve_back(tt::CB::c_in0, /* number of tiles */ 1);
   uint32_t L1_write_addr_in0 = get_write_ptr(tt::CB::c_in0);
-
-  // We use c_in1 for the tile received from other Tensix cores.
-  cb_reserve_back(tt::CB::c_in1, /* number of tiles */ 1);
-  uint32_t L1_write_addr_in1 = get_write_ptr(tt::CB::c_in1);
-
-  noc_async_read_tile(core_id, bank_for_input, L1_write_addr_in0);
+  noc_async_read_tile(0, bank_for_input, L1_write_addr_in0);
   noc_async_read_barrier();
 
-  volatile tt_l1_ptr float* ptr =
-      reinterpret_cast<volatile tt_l1_ptr float*>(L1_write_addr_in0);
-  LOG(DPRINT << "[READER] dram -> cb0: " << *(ptr) << ENDL());
-  ptr = reinterpret_cast<volatile tt_l1_ptr float*>(L1_write_addr_in0 + 4);
-  LOG(DPRINT << "[READER] dram -> cb0: " << *(ptr) << ENDL());
+#if TINY_DEBUG
+  LOG(DPRINT << TSLICE(tt::CB::c_in0, 0, hw_all()) << ENDL());
+#endif
 
-  // ---- Multi-casting start ----
-  // Based on multi-casting,
-  //  1. Receive i-th tile of input1 matrix from i-th Tensix core.
-  //  2. Send |core_id|-th tile of input1 matrix to all other Tensix cores.
-
-  LOG(DPRINT << "[READER] Multicast start" << ENDL());
+  uint64_t multicast_dst_noc_addr = get_noc_multicast_addr(
+      physical_core_x_end, physical_core_y_end, 1, 1, L1_write_addr_in0);
+  noc_async_write_multicast(L1_write_addr_in0, multicast_dst_noc_addr,
+                            tile_size_in_bytes, number_of_cores);
 
   volatile tt_l1_ptr uint32_t* receiver_sema_addr_ptr =
       reinterpret_cast<volatile tt_l1_ptr uint32_t*>(receiver_sema_addr);
-  for (uint32_t i = 0; i < core_id; ++i) {
-    noc_semaphore_set(receiver_sema_addr_ptr, 0);
-
-    uint32_t sender_noc_x = PHYSICAL_CORES_X[i % core_grid_x];
-    uint32_t sender_noc_y = PHYSICAL_CORES_Y[i / core_grid_x];
-    LOG(DPRINT << "[READER] sender_noc_x=" << sender_noc_x << ", "
-               << " sender_noc_y=" << sender_noc_y << ENDL());
-    uint64_t sender_sema_noc_addr =
-        get_noc_addr(sender_noc_x, sender_noc_y, sender_sema_addr);
-    noc_semaphore_inc(sender_sema_noc_addr, 1);
-
-    LOG(DPRINT << "[READER] wait " << core_id << ", " << i << ENDL());
-
-    noc_semaphore_wait(receiver_sema_addr_ptr, 1);
-
-#if TINY_DEBUG  // Print first float from CB1 for debugging.
-    volatile tt_l1_ptr float* ptr_first_float =
-        reinterpret_cast<volatile tt_l1_ptr float*>(L1_write_addr_in1);
-    LOG(DPRINT << "[READER] receive cb1: " << *(ptr_first_float) << ENDL());
-    ptr_first_float =
-        reinterpret_cast<volatile tt_l1_ptr float*>(L1_write_addr_in1 + 4);
-    LOG(DPRINT << "[READER] receive cb1: " << *(ptr_first_float) << ENDL());
-#endif
-
-    LOG(DPRINT << "[READER] done " << core_id << ", " << i << ENDL());
-  }
-
-  LOG(DPRINT << "[READER] sender sema wait " << sender_sema_addr << ENDL());
-
-  volatile tt_l1_ptr uint32_t* sender_sema_addr_ptr =
-      reinterpret_cast<volatile tt_l1_ptr uint32_t*>(sender_sema_addr);
-  noc_semaphore_wait(sender_sema_addr_ptr, number_of_cores - 1);
-  noc_semaphore_set(sender_sema_addr_ptr, 0);
-
-  uint64_t multicast_dst_noc_addr = get_noc_multicast_addr(
-      PHYSICAL_CORES_X[core_grid_x - 1], PHYSICAL_CORES_Y[core_grid_y - 1], 1,
-      1, L1_write_addr_in1);
-  // Based on mcast example provided by Tenstorrent, the number of destinations
-  // must not include source, since we are NOT really doing a local copy.
-  noc_async_write_multicast(L1_write_addr_in0, multicast_dst_noc_addr,
-                            tile_size_in_bytes, number_of_cores - 1);
-
-  LOG(DPRINT << "[READER] send sema release" << ENDL());
-
   *(receiver_sema_addr_ptr) = 1;  // Unlock semaphores of all receivers.
-  uint64_t noc_addr = get_noc_multicast_addr(PHYSICAL_CORES_X[core_grid_x - 1],
-                                             PHYSICAL_CORES_Y[core_grid_y - 1],
-                                             1, 1, receiver_sema_addr);
-  // Based on mcast example provided by Tenstorrent, the number of destinations
-  // must not include source, since we are NOT really doing a local copy.
-  noc_semaphore_set_multicast(receiver_sema_addr, noc_addr,
-                              number_of_cores - 1);
+  uint64_t noc_addr = get_noc_multicast_addr(
+      physical_core_x_end, physical_core_y_end, 1, 1, receiver_sema_addr);
+  noc_semaphore_set_multicast(receiver_sema_addr, noc_addr, number_of_cores);
 
-  // Note that we do not need both `noc_async_write_barrier()` and
-  // `noc_async_writes_flushed()` here. The barrier helps us to guarantee that
-  // the multi-cast write is done from receiver side and let it safely start
-  // the compute. Since the receiver waits for the semaphore, if it passes the
-  // wait line, it means the multi-cast write was already done.
+  uint32_t L1_read_addr_in0 = get_read_ptr(tt::CB::c_in0);
+#if TINY_DEBUG
+  volatile tt_l1_ptr float* ptr =
+      reinterpret_cast<volatile tt_l1_ptr float*>(L1_read_addr_in0);
+  LOG(DPRINT << *ptr << ENDL());
+  ptr = reinterpret_cast<volatile tt_l1_ptr float*>(L1_read_addr_in0 + 4);
+  LOG(DPRINT << *ptr << ENDL());
+#endif
+  LOG(DPRINT << "[READER] output_dram_addr = " << output_dram_addr << ENDL());
+  noc_async_write_tile(0, bank_for_output, L1_read_addr_in0);
+  noc_async_writes_flushed();
 
-  for (uint32_t i = core_id + 1; i < number_of_cores; ++i) {
-    noc_semaphore_set(receiver_sema_addr_ptr, 0);
+  cb_push_back(tt::CB::c_in0, /* number of tiles */ 1);
+  LOG(DPRINT << "[READER] done" << ENDL());
+}
 
-    uint32_t sender_noc_x = PHYSICAL_CORES_X[i % core_grid_x];
-    uint32_t sender_noc_y = PHYSICAL_CORES_Y[i / core_grid_x];
-    LOG(DPRINT << "[READER] sender_noc_x=" << sender_noc_x << ", "
-               << " sender_noc_y=" << sender_noc_y << ENDL());
-    uint64_t sender_sema_noc_addr =
-        get_noc_addr(sender_noc_x, sender_noc_y, sender_sema_addr);
-    noc_semaphore_inc(sender_sema_noc_addr, 1);
+static inline void receive(uint32_t core_id, uint32_t receiver_sema_addr,
+                           uint32_t output_dram_addr) {
+  const uint32_t tile_size_in_bytes = get_tile_size(tt::CB::c_in0);
+  const DataFormat format = get_dataformat(tt::CB::c_in0);
+  const InterleavedAddrGenFast</* From DRAM address */ true> bank_for_output = {
+      .bank_base_address = output_dram_addr,
+      .page_size = tile_size_in_bytes,
+      .data_format = format};
 
-    LOG(DPRINT << "[READER] wait " << core_id << ", " << i << ENDL());
+  cb_reserve_back(tt::CB::c_in0, /* number of tiles */ 1);
+  volatile tt_l1_ptr uint32_t* receiver_sema_addr_ptr =
+      reinterpret_cast<volatile tt_l1_ptr uint32_t*>(receiver_sema_addr);
+  noc_semaphore_wait(receiver_sema_addr_ptr, 1);
 
-    noc_semaphore_wait(receiver_sema_addr_ptr, 1);
-
-#if TINY_DEBUG  // Print first float from CB1 for debugging.
-    volatile tt_l1_ptr float* ptr_first_float =
-        reinterpret_cast<volatile tt_l1_ptr float*>(L1_write_addr_in1);
-    LOG(DPRINT << "[READER] receive cb1: " << *(ptr_first_float) << ENDL());
-    ptr_first_float =
-        reinterpret_cast<volatile tt_l1_ptr float*>(L1_write_addr_in1 + 4);
-    LOG(DPRINT << "[READER] receive cb1: " << *(ptr_first_float) << ENDL());
+#if TINY_DEBUG
+  LOG(DPRINT << TSLICE(tt::CB::c_in0, 0, hw_all()) << ENDL());
 #endif
 
-    LOG(DPRINT << "[READER] done " << core_id << ", " << i << ENDL());
-  }
+  uint32_t L1_read_addr_in0 = get_read_ptr(tt::CB::c_in0);
+#if TINY_DEBUG
+  volatile tt_l1_ptr float* ptr =
+      reinterpret_cast<volatile tt_l1_ptr float*>(L1_read_addr_in0);
+  LOG(DPRINT << *ptr << ENDL());
+  ptr = reinterpret_cast<volatile tt_l1_ptr float*>(L1_read_addr_in0 + 4);
+  LOG(DPRINT << *ptr << ENDL());
+#endif
+  LOG(DPRINT << "[READER] output_dram_addr = " << output_dram_addr << ENDL());
+  noc_async_write_tile(core_id, bank_for_output, L1_read_addr_in0);
+  noc_async_writes_flushed();
 
-  // ---- Multi-casting end ----
   cb_push_back(tt::CB::c_in0, /* number of tiles */ 1);
-  cb_push_back(tt::CB::c_in1, /* number of tiles */ 1);
+  LOG(DPRINT << "[READER] done" << ENDL());
+}
+
+void kernel_main() {
+  uint32_t core_id = get_arg_val<uint32_t>(0);
+  uint32_t input_dram_addr = get_arg_val<uint32_t>(1);
+  uint32_t receiver_sema_addr = get_arg_val<uint32_t>(2);
+  uint32_t sender_sema_addr = get_arg_val<uint32_t>(3);
+  uint32_t output_dram_addr = get_arg_val<uint32_t>(4);
+  init_physical_cores(5);
+  LOG(DPRINT << "[READER] receiver_sema_addr=" << receiver_sema_addr << ENDL());
+  LOG(DPRINT << "[READER] sender_sema_addr=" << sender_sema_addr << ENDL());
+
+  if (core_id == 0) {
+    send(input_dram_addr, receiver_sema_addr, output_dram_addr);
+  } else {
+    receive(core_id, receiver_sema_addr, output_dram_addr);
+  }
 }

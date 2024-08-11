@@ -328,12 +328,22 @@ void TestMulticastAdvanced() {
 
   const uint32_t number_of_input_elems =
       num_cores * tiny::TileWidth() * tiny::TileHeight();
-  auto input = std::make_shared<tiny::Buffer<T>>(number_of_input_elems, 123);
+  auto input = std::make_shared<tiny::Buffer<T>>(number_of_input_elems, 1234);
   auto output =
       std::make_shared<tiny::Buffer<T>>(num_cores * number_of_input_elems);
 
   multicast_advanced.SetBuffers(input, output);
   multicast_advanced.Run();
+
+  auto& input_vec = input->GetVector();
+  std::cout << "input: " << input_vec[0] << std::endl;
+  auto& output_vec = output->GetVector();
+  const uint32_t number_of_elems_in_tile =
+      tiny::TileWidth() * tiny::TileHeight();
+  for (uint32_t i = 0; i < num_cores; ++i) {
+    std::cout << i << ": " << output_vec[i * number_of_elems_in_tile]
+              << std::endl;
+  }
 
   bool pass = tt::tt_metal::CloseDevice(device);
   if (pass) {

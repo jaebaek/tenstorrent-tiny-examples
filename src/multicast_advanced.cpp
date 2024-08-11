@@ -23,8 +23,6 @@
 
 namespace {
 
-static const uint32_t kSingleTileSize = tiny::SingleTileSize<bfloat16>();
-
 void SetDataMovementKernel(tt::tt_metal::Program& program, CoreCoord core_grid,
                            uint32_t input_device_dram_address,
                            uint32_t receiver_sema_addr,
@@ -42,6 +40,8 @@ void SetDataMovementKernel(tt::tt_metal::Program& program, CoreCoord core_grid,
   std::vector<uint32_t> runtime_args{0, input_device_dram_address,
                                      receiver_sema_addr, sender_sema_addr,
                                      output_device_dram_address};
+  std::cout << "receiver_sema_addr: " << receiver_sema_addr << std::endl;
+  std::cout << "sender_sema_addr: " << sender_sema_addr << std::endl;
   runtime_args.insert(runtime_args.end(), physical_core_coord_info.begin(),
                       physical_core_coord_info.end());
 
@@ -79,17 +79,14 @@ tiny::Result _Run(tt::tt_metal::Device* device,
   tt::tt_metal::CommandQueue& command_queue = device->command_queue();
   tt::tt_metal::Program program{};
 
-  auto all_cores = CoreRange({0, 0}, {core_grid.x - 1, core_grid.y - 1});
-
   auto input_on_device_dram =
       tiny::CreateBufferOnDeviceDRAM<T>(device, input->GetSizeInBytes());
   auto output_on_device_dram =
       tiny::CreateBufferOnDeviceDRAM<T>(device, output->GetSizeInBytes());
 
+  auto all_cores = CoreRange({0, 0}, {core_grid.x - 1, core_grid.y - 1});
   tiny::CreateCircularBufferOnDevice<T>(tt::CB::c_in0, program, all_cores);
   tiny::CreateCircularBufferOnDevice<T>(tt::CB::c_in1, program, all_cores);
-  tiny::CreateCircularBufferOnDevice<T>(tt::CB::c_in2, program, all_cores);
-  tiny::CreateCircularBufferOnDevice<T>(tt::CB::c_out0, program, all_cores);
 
   auto receiver_sema_addr =
       tt::tt_metal::CreateSemaphore(program, all_cores, 0);
