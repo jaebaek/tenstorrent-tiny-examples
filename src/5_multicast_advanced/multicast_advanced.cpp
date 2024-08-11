@@ -31,7 +31,8 @@ void SetDataMovementKernel(tt::tt_metal::Program& program, CoreCoord core_grid,
                            std::vector<uint32_t> physical_core_coord_info) {
   auto all_cores = CoreRange({0, 0}, {core_grid.x - 1, core_grid.y - 1});
   auto data_mover_id = tt::tt_metal::CreateKernel(
-      program, "../../src/kernels/multicast_advanced.cpp", all_cores,
+      program, "../../src/5_multicast_advanced/kernels/multicast_advanced.cpp",
+      all_cores,
       tt::tt_metal::DataMovementConfig{
           .processor = tt::tt_metal::DataMovementProcessor::RISCV_1,
           .noc = NOC::RISCV_1_default,
@@ -40,8 +41,6 @@ void SetDataMovementKernel(tt::tt_metal::Program& program, CoreCoord core_grid,
   std::vector<uint32_t> runtime_args{0, input_device_dram_address,
                                      receiver_sema_addr, sender_sema_addr,
                                      output_device_dram_address};
-  std::cout << "receiver_sema_addr: " << receiver_sema_addr << std::endl;
-  std::cout << "sender_sema_addr: " << sender_sema_addr << std::endl;
   runtime_args.insert(runtime_args.end(), physical_core_coord_info.begin(),
                       physical_core_coord_info.end());
 

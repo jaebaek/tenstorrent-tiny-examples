@@ -22,11 +22,11 @@
 #include "2_single_tile_loopback_four_cores/single_tile_loopback_four_cores.h"
 #include "3_simple_multicast/simple_multicast.h"
 #include "4_single_tile_matmul/single_tile_matmul.h"
+#include "5_multicast_advanced/multicast_advanced.h"
 #include "buffer.h"
 #include "conv.h"
 #include "log.h"
 #include "matmul_cpu.h"
-#include "multicast_advanced.h"
 #include "multicast_matmul.h"
 #include "tt_metal/common/bfloat16.hpp"
 #include "tt_metal/common/tilize_untilize.hpp"
@@ -335,23 +335,22 @@ void TestMulticastAdvanced() {
   multicast_advanced.SetBuffers(input, output);
   multicast_advanced.Run();
 
+  bool pass = tt::tt_metal::CloseDevice(device);
+
   auto& input_vec = input->GetVector();
-  std::cout << "input: " << input_vec[0] << std::endl;
   auto& output_vec = output->GetVector();
   const uint32_t number_of_elems_in_tile =
       tiny::TileWidth() * tiny::TileHeight();
+  uint32_t max_print_count = 0;
   for (uint32_t i = 0; i < num_cores; ++i) {
-    std::cout << i << ": " << output_vec[i * number_of_elems_in_tile]
-              << std::endl;
-  }
-
-  bool pass = tt::tt_metal::CloseDevice(device);
-  for (uint32_t i = 0; i < num_cores; ++i) {
-    pass =
-        pass && IsErrorLargerThanThreshold<T>(input, 0, number_of_input_elems,
-                                              output, i * number_of_input_elems,
-                                              (i + 1) * number_of_input_elems);
-    if (pass) log_blue("Partial output matches", __FUNCTION__);
+    for (uint32_t j = 0; j < number_of_input_elems; ++j) {
+      if (input_vec[j] != output_vec[i * number_of_input_elems + j]) {
+        std::cout << i << ", " << j << ": " << input_vec[j] << ", "
+                  << output_vec[i * number_of_input_elems + j] << std::endl;
+        pass = false;
+        break;
+      }
+    }
   }
   if (pass) {
     log_green("-- PASS: {} --", __FUNCTION__);

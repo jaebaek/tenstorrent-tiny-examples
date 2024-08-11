@@ -17,7 +17,7 @@
 #include "dataflow_api.h"
 #include "debug/dprint.h"
 
-#define TINY_DEBUG 1
+#define TINY_DEBUG 0
 
 #if TINY_DEBUG
 #define LOG(X) DPRINT_DATA1(X)
@@ -34,6 +34,7 @@ constexpr uint32_t core_grid_y = get_compile_time_arg_val(1);
 constexpr uint32_t number_of_cores = core_grid_x * core_grid_y;
 uint32_t PHYSICAL_CORES_X[core_grid_x];
 uint32_t PHYSICAL_CORES_Y[core_grid_y];
+uint32_t physical_core_x_start, physical_core_y_start;
 uint32_t physical_core_x_end, physical_core_y_end;
 
 constexpr uint32_t tile_size_in_bytes = get_tile_size(tt::CB::c_in0);
@@ -47,6 +48,8 @@ static void init_physical_cores(const uint32_t start_arg_index) {
     PHYSICAL_CORES_Y[i] =
         get_arg_val<uint32_t>(start_arg_index + core_grid_x + i);
   }
+  physical_core_x_start = PHYSICAL_CORES_X[0];
+  physical_core_y_start = PHYSICAL_CORES_Y[0];
   physical_core_x_end = PHYSICAL_CORES_X[core_grid_x - 1];
   physical_core_y_end = PHYSICAL_CORES_Y[core_grid_y - 1];
 }
@@ -69,16 +72,19 @@ static inline void send(uint32_t core_id, uint32_t L1_write_addr_in0,
   noc_semaphore_set(sender_sema_addr_ptr, 0);
 
   uint64_t multicast_dst_noc_addr = get_noc_multicast_addr(
-      physical_core_x_end, physical_core_y_end, 1, 1, L1_write_addr_in1);
+      physical_core_x_end, physical_core_y_end, physical_core_x_start,
+      physical_core_y_start, L1_write_addr_in1);
   noc_async_write_multicast(L1_write_addr_in0, multicast_dst_noc_addr,
-                            tile_size_in_bytes, number_of_cores);
+                            tile_size_in_bytes, number_of_cores - 1);
 
   volatile tt_l1_ptr uint32_t* receiver_sema_addr_ptr =
       reinterpret_cast<volatile tt_l1_ptr uint32_t*>(receiver_sema_addr);
   *(receiver_sema_addr_ptr) = 1;  // Unlock semaphores of all receivers.
   uint64_t noc_addr = get_noc_multicast_addr(
-      physical_core_x_end, physical_core_y_end, 1, 1, receiver_sema_addr);
-  noc_semaphore_set_multicast(receiver_sema_addr, noc_addr, number_of_cores);
+      physical_core_x_end, physical_core_y_end, physical_core_x_start,
+      physical_core_y_start, receiver_sema_addr);
+  noc_semaphore_set_multicast(receiver_sema_addr, noc_addr,
+                              number_of_cores - 1);
 
   uint32_t L1_read_addr_in0 = get_read_ptr(tt::CB::c_in0);
 #if TINY_DEBUG
@@ -87,12 +93,15 @@ static inline void send(uint32_t core_id, uint32_t L1_write_addr_in0,
   LOG(DPRINT << *ptr << ENDL());
   ptr = reinterpret_cast<volatile tt_l1_ptr float*>(L1_read_addr_in0 + 4);
   LOG(DPRINT << *ptr << ENDL());
-#endif
   LOG(DPRINT << "[READER] write to " << (core_id * number_of_cores + core_id)
              << ENDL());
+#endif
   noc_async_write_tile(core_id * number_of_cores + core_id, bank_for_output,
                        L1_read_addr_in0);
-  noc_async_writes_flushed();
+  noc_async_write_barrier();
+
+  // We have to re-initialize receiver sema for its next receiver turn.
+  *(receiver_sema_addr_ptr) = 0;
 
   LOG(DPRINT << "[READER] done" << ENDL());
 }
@@ -129,12 +138,12 @@ static inline void receive(uint32_t core_id, uint32_t receiver_sema_addr,
   LOG(DPRINT << *ptr << ENDL());
   ptr = reinterpret_cast<volatile tt_l1_ptr float*>(L1_read_addr_in1 + 4);
   LOG(DPRINT << *ptr << ENDL());
-#endif
   LOG(DPRINT << "[READER] write to " << (core_id * number_of_cores + sender)
              << ENDL());
+#endif
   noc_async_write_tile(core_id * number_of_cores + sender, bank_for_output,
                        L1_read_addr_in1);
-  noc_async_writes_flushed();
+  noc_async_write_barrier();
 
   LOG(DPRINT << "[READER] done" << ENDL());
 }
