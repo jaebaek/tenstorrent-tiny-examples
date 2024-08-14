@@ -155,8 +155,6 @@ void kernel_main() {
   uint32_t sender_sema_addr = get_arg_val<uint32_t>(3);
   uint32_t output_dram_addr = get_arg_val<uint32_t>(4);
   init_physical_cores(5);
-  LOG(DPRINT << "[READER] receiver_sema_addr=" << receiver_sema_addr << ENDL());
-  LOG(DPRINT << "[READER] sender_sema_addr=" << sender_sema_addr << ENDL());
 
   const InterleavedAddrGenFast</* From DRAM address */ true> bank_for_input = {
       .bank_base_address = input_dram_addr,

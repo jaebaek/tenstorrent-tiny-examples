@@ -52,22 +52,6 @@ void SetDataMovementKernel(tt::tt_metal::Program& program, CoreCoord core_grid,
   }
 }
 
-std::vector<uint32_t> GetPhysicalCoreCoord(tt::tt_metal::Device* device,
-                                           CoreCoord core_grid) {
-  std::vector<uint32_t> physical_core_coord_info;
-  for (uint32_t x = 0; x < core_grid.x; ++x) {
-    CoreCoord core = {x, 0};
-    auto core_physical = device->worker_core_from_logical_core(core);
-    physical_core_coord_info.push_back(core_physical.x);
-  }
-  for (uint32_t y = 0; y < core_grid.y; ++y) {
-    CoreCoord core = {0, y};
-    auto core_physical = device->worker_core_from_logical_core(core);
-    physical_core_coord_info.push_back(core_physical.y);
-  }
-  return std::move(physical_core_coord_info);
-}
-
 template <typename T>
 tiny::Result _Run(tt::tt_metal::Device* device,
                   std::shared_ptr<tiny::Buffer<T>> input,
@@ -91,14 +75,16 @@ tiny::Result _Run(tt::tt_metal::Device* device,
       tt::tt_metal::CreateSemaphore(program, all_cores, 0);
   auto sender_sema_addr = tt::tt_metal::CreateSemaphore(program, all_cores, 0);
 
-  SetDataMovementKernel(program, core_grid, input_on_device_dram->address(),
-                        receiver_sema_addr, sender_sema_addr,
-                        output_on_device_dram->address(),
-                        std::move(GetPhysicalCoreCoord(device, core_grid)));
+  SetDataMovementKernel(
+      program, core_grid, input_on_device_dram->address(), receiver_sema_addr,
+      sender_sema_addr, output_on_device_dram->address(),
+      std::move(tiny::GetPhysicalCoreCoord(device, core_grid)));
 
   tt::tt_metal::EnqueueWriteBuffer(command_queue, input_on_device_dram,
                                    input->GetVector().data(), false);
   tt::tt_metal::EnqueueProgram(command_queue, program, false);
+  tt::tt_metal::Finish(command_queue);
+
   tt::tt_metal::EnqueueReadBuffer(command_queue, output_on_device_dram,
                                   output->GetVector().data(), true);
 

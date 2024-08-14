@@ -66,6 +66,8 @@ tiny::Result _Run(std::shared_ptr<tiny::Buffer<T>> input,
   tt::tt_metal::EnqueueWriteBuffer(command_queue, input_on_device_dram,
                                    input->GetVector().data(), false);
   tt::tt_metal::EnqueueProgram(command_queue, program, false);
+  tt::tt_metal::Finish(command_queue);
+
   tt::tt_metal::EnqueueReadBuffer(command_queue, output_on_device_dram,
                                   output->GetVector().data(), true);
 

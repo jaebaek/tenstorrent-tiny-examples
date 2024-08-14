@@ -14,4 +14,22 @@
 
 #include "utils.h"
 
-namespace tiny {} /* namespace tiny */
+namespace tiny {
+
+std::vector<uint32_t> GetPhysicalCoreCoord(tt::tt_metal::Device* device,
+                                           CoreCoord core_grid) {
+  std::vector<uint32_t> physical_core_coord_info;
+  for (uint32_t x = 0; x < core_grid.x; ++x) {
+    CoreCoord core = {x, 0};
+    auto core_physical = device->worker_core_from_logical_core(core);
+    physical_core_coord_info.push_back(core_physical.x);
+  }
+  for (uint32_t y = 0; y < core_grid.y; ++y) {
+    CoreCoord core = {0, y};
+    auto core_physical = device->worker_core_from_logical_core(core);
+    physical_core_coord_info.push_back(core_physical.y);
+  }
+  return std::move(physical_core_coord_info);
+}
+
+} /* namespace tiny */

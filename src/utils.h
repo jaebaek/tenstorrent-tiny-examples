@@ -241,6 +241,9 @@ void CreateCircularBufferOnDevice(uint32_t circular_buffer_id,
   tt::tt_metal::CreateCircularBuffer(program, cores, conf);
 }
 
+std::vector<uint32_t> GetPhysicalCoreCoord(tt::tt_metal::Device* device,
+                                           CoreCoord core_grid);
+
 } /* namespace tiny */
 
 #endif /* ifndef utils_h */

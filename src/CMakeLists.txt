@@ -5,6 +5,7 @@ add_executable(tiny_tt_examples
     blas_op.h
     buffer.cpp
     buffer.h
+    utils.cpp
     utils.h
     matmul_cpu.cpp
     matmul_cpu.h
