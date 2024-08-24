@@ -59,6 +59,9 @@ class Buffer {
   }
 
   void Untilize(uint32_t width, uint32_t height) {
+    // Return if it is already untilized.
+    if (!tilized_) return;
+
     UnTilizeForTTDevice<T>(buffer_, width, height);
     tilized_ = false;
   }

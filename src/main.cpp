@@ -288,17 +288,17 @@ void TestMulticastMatrixMultiplication() {
   multicast_matmul.SetBuffers(input0, input1, output_multicast_matmul);
   multicast_matmul.Run();
 
+  bool pass = tt::tt_metal::CloseDevice(device);
+
+  /*
   output_multicast_matmul->Untilize(num_cores * tiny::TileWidth(),
                                     num_cores * tiny::TileHeight());
+                                               */
 
-  bool pass = tt::tt_metal::CloseDevice(device);
-  /*
   pass = pass && IsErrorLargerThanThreshold<T>(output_cpu_matmul,
                                                output_multicast_matmul,
                                                num_cores * tiny::TileWidth(),
                                                num_cores * tiny::TileHeight());
-                                               */
-
   if (pass) {
     log_green("-- PASS: {} --", __FUNCTION__);
   } else {
@@ -343,7 +343,6 @@ void TestMulticastAdvanced() {
   auto& output_vec = output->GetVector();
   const uint32_t number_of_elems_in_tile =
       tiny::TileWidth() * tiny::TileHeight();
-  uint32_t max_print_count = 0;
   for (uint32_t i = 0; i < num_cores; ++i) {
     for (uint32_t j = 0; j < number_of_input_elems; ++j) {
       if (input_vec[j] != output_vec[i * number_of_input_elems + j]) {
@@ -364,6 +363,7 @@ void TestMulticastAdvanced() {
 } /* namespace */
 
 int main(int argc, const char* argv[]) {
+#if 0  // This multi-cast example is not working. Will revisit this later.
   try {
     TestSingleTileLoopback<float>();
   } catch (const std::exception& e) {
@@ -405,8 +405,8 @@ int main(int argc, const char* argv[]) {
     log_error("{}", e.what());
     throw;
   }
+#endif
 
-#if 1  // This multi-cast example is not working. Will revisit this later.
   try {
     TestMulticastMatrixMultiplication<float>();
   } catch (const std::exception& e) {
@@ -415,7 +415,6 @@ int main(int argc, const char* argv[]) {
     log_error("{}", e.what());
     throw;
   }
-#endif
 
 #if 0  // WIP
   TestConv<float>();

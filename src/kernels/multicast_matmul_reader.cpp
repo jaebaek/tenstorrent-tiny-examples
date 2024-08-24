@@ -58,7 +58,7 @@ static inline void send(uint32_t core_id, uint32_t src, uint32_t dest,
                         uint32_t receiver_sema_addr,
                         uint32_t sender_sema_addr) {
 #if TINY_DEBUG
-  LOG(DPRINT << TSLICE(tt::CB::c_in1, 0, hw_all()) << ENDL());
+  LOG(DPRINT << TSLICE(tt::CB::c_in2, 0, hw_all()) << ENDL());
 #endif
 
   volatile tt_l1_ptr uint32_t* sender_sema_addr_ptr =
@@ -81,16 +81,17 @@ static inline void send(uint32_t core_id, uint32_t src, uint32_t dest,
   noc_semaphore_set_multicast(receiver_sema_addr, noc_addr,
                               number_of_cores - 1);
 
-  uint32_t L1_read_addr_in0 = get_read_ptr(tt::CB::c_in1);
+  uint32_t L1_read_addr_in2 = get_read_ptr(tt::CB::c_in2);
 #if TINY_DEBUG
   volatile tt_l1_ptr float* ptr =
-      reinterpret_cast<volatile tt_l1_ptr float*>(L1_read_addr_in0);
+      reinterpret_cast<volatile tt_l1_ptr float*>(L1_read_addr_in2);
   LOG(DPRINT << *ptr << ENDL());
-  ptr = reinterpret_cast<volatile tt_l1_ptr float*>(L1_read_addr_in0 + 4);
+  ptr = reinterpret_cast<volatile tt_l1_ptr float*>(L1_read_addr_in2 + 4);
   LOG(DPRINT << *ptr << ENDL());
-  LOG(DPRINT << "[READER] write to " << (core_id * number_of_cores + core_id)
+  LOG(DPRINT << "[READER] send " << (core_id * number_of_cores + core_id)
              << ENDL());
 #endif
+  noc_async_write_barrier();
 
   // We have to re-initialize receiver sema for its next receiver turn.
   *(receiver_sema_addr_ptr) = 0;
@@ -114,19 +115,20 @@ static inline void receive(uint32_t core_id, uint32_t receiver_sema_addr,
   noc_semaphore_set(receiver_sema_addr_ptr, 0);
 
 #if TINY_DEBUG
-  LOG(DPRINT << TSLICE(tt::CB::c_in2, 0, hw_all()) << ENDL());
+  LOG(DPRINT << TSLICE(tt::CB::c_in1, 0, hw_all()) << ENDL());
 #endif
 
-  uint32_t L1_read_addr_in1 = get_read_ptr(tt::CB::c_in2);
+  uint32_t L1_read_addr_in1 = get_read_ptr(tt::CB::c_in1);
 #if TINY_DEBUG
   volatile tt_l1_ptr float* ptr =
       reinterpret_cast<volatile tt_l1_ptr float*>(L1_read_addr_in1);
   LOG(DPRINT << *ptr << ENDL());
   ptr = reinterpret_cast<volatile tt_l1_ptr float*>(L1_read_addr_in1 + 4);
   LOG(DPRINT << *ptr << ENDL());
-  LOG(DPRINT << "[READER] write to " << (core_id * number_of_cores + sender)
+  LOG(DPRINT << "[READER] send " << (core_id * number_of_cores + sender)
              << ENDL());
 #endif
+  noc_async_write_barrier();
 
   LOG(DPRINT << "[READER] done" << ENDL());
 }
@@ -156,24 +158,22 @@ void kernel_main() {
       .page_size = tile_size_in_bytes,
       .data_format = format};
 
-  // Read a single tile from DRAM |input1_dram_addr| to circular buffer in1.
-  cb_reserve_back(tt::CB::c_in1, /* number of tiles */ 1);
-  uint32_t L1_write_addr_in1 = get_write_ptr(tt::CB::c_in1);
-  noc_async_read_tile(core_id, bank_for_input1, L1_write_addr_in1);
-  noc_async_read_barrier();
-
+  // Read a single tile from DRAM |input1_dram_addr| to circular buffer in2.
   cb_reserve_back(tt::CB::c_in2, /* number of tiles */ 1);
   uint32_t L1_write_addr_in2 = get_write_ptr(tt::CB::c_in2);
+  noc_async_read_tile(core_id, bank_for_input1, L1_write_addr_in2);
+  noc_async_read_barrier();
 
   for (uint32_t i = 0; i < number_of_cores; ++i) {
+    cb_reserve_back(tt::CB::c_in1, /* number of tiles */ 1);
     if (i == core_id) {
-      send(core_id, L1_write_addr_in1, L1_write_addr_in2, receiver_sema_addr,
+      uint32_t L1_write_addr_in1 = get_write_ptr(tt::CB::c_in1);
+      send(core_id, L1_write_addr_in2, L1_write_addr_in1, receiver_sema_addr,
            sender_sema_addr);
+      cb_push_back(tt::CB::c_in2, /* number of tiles */ 1);
     } else {
       receive(core_id, receiver_sema_addr, sender_sema_addr, i);
     }
+    cb_push_back(tt::CB::c_in1, /* number of tiles */ 1);
   }
-
-  cb_push_back(tt::CB::c_in2, /* number of tiles */ 1);
-  cb_push_back(tt::CB::c_in1, /* number of tiles */ 1);
 }

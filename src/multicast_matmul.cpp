@@ -52,6 +52,21 @@ void SetReaderKernel(tt::tt_metal::Program& program, CoreCoord core_grid,
   }
 }
 
+void SetComputeKernel(tt::tt_metal::Program& program, CoreCoord core_grid) {
+  auto all_cores = CoreRange({0, 0}, {core_grid.x - 1, core_grid.y - 1});
+  uint32_t number_of_cores = core_grid.x * core_grid.y;
+
+  auto compute_id = tt::tt_metal::CreateKernel(
+      program, "../../src/kernels/multicast_matmul.cpp", all_cores,
+      tt::tt_metal::ComputeConfig{.math_fidelity = MathFidelity::HiFi4,
+                                  .compile_args = {number_of_cores}});
+
+  for (uint32_t i = 0; i < number_of_cores; ++i) {
+    CoreCoord core = {i % core_grid.x, i / core_grid.x};
+    tt::tt_metal::SetRuntimeArgs(program, compute_id, core, {i});
+  }
+}
+
 void SetWriteKernel(tt::tt_metal::Program& program, CoreCoord core_grid,
                     uint32_t output_device_dram_address) {
   auto all_cores = CoreRange({0, 0}, {core_grid.x - 1, core_grid.y - 1});
@@ -71,21 +86,6 @@ void SetWriteKernel(tt::tt_metal::Program& program, CoreCoord core_grid,
   }
 }
 
-void SetComputeKernel(tt::tt_metal::Program& program, CoreCoord core_grid) {
-  auto all_cores = CoreRange({0, 0}, {core_grid.x - 1, core_grid.y - 1});
-  uint32_t number_of_cores = core_grid.x * core_grid.y;
-
-  auto compute_id = tt::tt_metal::CreateKernel(
-      program, "../../src/kernels/multicast_matmul.cpp", all_cores,
-      tt::tt_metal::ComputeConfig{.math_fidelity = MathFidelity::HiFi4,
-                                  .compile_args = {number_of_cores}});
-
-  for (uint32_t i = 0; i < number_of_cores; ++i) {
-    CoreCoord core = {i % core_grid.x, i / core_grid.x};
-    tt::tt_metal::SetRuntimeArgs(program, compute_id, core, {i});
-  }
-}
-
 void SetKernels(tt::tt_metal::Program& program, CoreCoord core_grid,
                 uint32_t input0_device_dram_address,
                 uint32_t input1_device_dram_address,
@@ -95,8 +95,8 @@ void SetKernels(tt::tt_metal::Program& program, CoreCoord core_grid,
   SetReaderKernel(program, core_grid, input0_device_dram_address,
                   input1_device_dram_address, receiver_sema_addr,
                   sender_sema_addr, std::move(physical_core_coord_info));
-  // SetWriteKernel(program, core_grid, output_device_dram_address);
-  // SetComputeKernel(program, core_grid);
+  SetComputeKernel(program, core_grid);
+  SetWriteKernel(program, core_grid, output_device_dram_address);
 }
 
 template <typename T>
@@ -145,6 +145,8 @@ tiny::Result _Run(tt::tt_metal::Device* device,
   tt::tt_metal::EnqueueReadBuffer(command_queue, output_on_device_dram,
                                   output->GetVector().data(), true);
 
+  output->Untilize(num_cores * tiny::TileHeight(),
+                   num_cores * tiny::TileWidth());
   return tiny::Result::kSuccess;
 }
 
