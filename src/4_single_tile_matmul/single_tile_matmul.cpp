@@ -114,6 +114,8 @@ tiny::Result _Run(std::shared_ptr<tiny::Buffer<T>> input0,
   tt::tt_metal::EnqueueReadBuffer(command_queue, output_on_device_dram,
                                   output->GetVector().data(), true);
 
+  output->Untilize(tiny::TileWidth(), tiny::TileHeight());
+
   bool pass = tt::tt_metal::CloseDevice(device);
   return pass ? tiny::Result::kSuccess : tiny::Result::kFail;
 }

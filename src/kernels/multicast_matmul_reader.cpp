@@ -17,7 +17,7 @@
 #include "dataflow_api.h"
 #include "debug/dprint.h"
 
-#define TINY_DEBUG 1
+#define TINY_DEBUG 0
 
 #if TINY_DEBUG
 #define LOG(X) DPRINT_DATA1(X)
@@ -57,10 +57,6 @@ static void init_physical_cores(const uint32_t start_arg_index) {
 static inline void send(uint32_t core_id, uint32_t src, uint32_t dest,
                         uint32_t receiver_sema_addr,
                         uint32_t sender_sema_addr) {
-#if TINY_DEBUG
-  LOG(DPRINT << TSLICE(tt::CB::c_in2, 0, hw_all()) << ENDL());
-#endif
-
   volatile tt_l1_ptr uint32_t* sender_sema_addr_ptr =
       reinterpret_cast<volatile tt_l1_ptr uint32_t*>(sender_sema_addr);
   noc_semaphore_wait(sender_sema_addr_ptr, number_of_cores - 1);
@@ -82,29 +78,16 @@ static inline void send(uint32_t core_id, uint32_t src, uint32_t dest,
                               number_of_cores - 1);
 
   uint32_t L1_read_addr_in2 = get_read_ptr(tt::CB::c_in2);
-#if TINY_DEBUG
-  volatile tt_l1_ptr float* ptr =
-      reinterpret_cast<volatile tt_l1_ptr float*>(L1_read_addr_in2);
-  LOG(DPRINT << *ptr << ENDL());
-  ptr = reinterpret_cast<volatile tt_l1_ptr float*>(L1_read_addr_in2 + 4);
-  LOG(DPRINT << *ptr << ENDL());
-  LOG(DPRINT << "[READER] send " << (core_id * number_of_cores + core_id)
-             << ENDL());
-#endif
   noc_async_write_barrier();
 
   // We have to re-initialize receiver sema for its next receiver turn.
   *(receiver_sema_addr_ptr) = 0;
-
-  LOG(DPRINT << "[READER] done" << ENDL());
 }
 
 static inline void receive(uint32_t core_id, uint32_t receiver_sema_addr,
                            uint32_t sender_sema_addr, uint32_t sender) {
   uint32_t sender_noc_x = PHYSICAL_CORES_X[sender % core_grid_x];
   uint32_t sender_noc_y = PHYSICAL_CORES_Y[sender / core_grid_x];
-  LOG(DPRINT << "[READER] sender_noc_x=" << sender_noc_x << ", "
-             << " sender_noc_y=" << sender_noc_y << ENDL());
   uint64_t sender_sema_noc_addr =
       get_noc_addr(sender_noc_x, sender_noc_y, sender_sema_addr);
   noc_semaphore_inc(sender_sema_noc_addr, 1);
@@ -114,23 +97,8 @@ static inline void receive(uint32_t core_id, uint32_t receiver_sema_addr,
   noc_semaphore_wait(receiver_sema_addr_ptr, 1);
   noc_semaphore_set(receiver_sema_addr_ptr, 0);
 
-#if TINY_DEBUG
-  LOG(DPRINT << TSLICE(tt::CB::c_in1, 0, hw_all()) << ENDL());
-#endif
-
   uint32_t L1_read_addr_in1 = get_read_ptr(tt::CB::c_in1);
-#if TINY_DEBUG
-  volatile tt_l1_ptr float* ptr =
-      reinterpret_cast<volatile tt_l1_ptr float*>(L1_read_addr_in1);
-  LOG(DPRINT << *ptr << ENDL());
-  ptr = reinterpret_cast<volatile tt_l1_ptr float*>(L1_read_addr_in1 + 4);
-  LOG(DPRINT << *ptr << ENDL());
-  LOG(DPRINT << "[READER] send " << (core_id * number_of_cores + sender)
-             << ENDL());
-#endif
   noc_async_write_barrier();
-
-  LOG(DPRINT << "[READER] done" << ENDL());
 }
 
 void kernel_main() {

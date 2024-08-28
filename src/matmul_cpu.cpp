@@ -44,7 +44,7 @@ tiny::Result _Run(std::shared_ptr<tiny::Buffer<T>> input0,
         for (uint32_t ti = i; ti < i + kTileHeightCPU; ++ti) {
           for (uint32_t tj = j; tj < j + kTileWidthCPU; ++tj) {
             uint32_t index0 = ti * k_ + k;
-            uint32_t index1 = k * k_ + tj;
+            uint32_t index1 = k * n_ + tj;
             output_vec[ti * n_ + tj] += input_vec0[index0] * input_vec1[index1];
           }
         }
@@ -69,7 +69,7 @@ Result CPUMatrixMultiplication<bfloat16>::Run() {
       float element = 0.0f;
       for (uint32_t k = 0; k < k_; ++k) {
         uint32_t index0 = i * k_ + k;
-        uint32_t index1 = k * k_ + j;
+        uint32_t index1 = k * n_ + j;
         bfloat16 value(inputs_[0]->GetVector()[index0].to_float() *
                        inputs_[1]->GetVector()[index1].to_float());
         element += value.to_float();

@@ -18,6 +18,7 @@
 #include <iostream>
 #include <vector>
 
+#include "tt_metal/common/tilize_untilize.hpp"
 #include "tt_metal/host_api.hpp"
 #include "utils.h"
 
@@ -140,8 +141,6 @@ tiny::Result _Run(tt::tt_metal::Device* device,
   tt::tt_metal::EnqueueWriteBuffer(command_queue, input1_on_device_dram,
                                    input1->GetVector().data(), false);
   tt::tt_metal::EnqueueProgram(command_queue, program, false);
-  tt::tt_metal::Finish(command_queue);
-
   tt::tt_metal::EnqueueReadBuffer(command_queue, output_on_device_dram,
                                   output->GetVector().data(), true);
 

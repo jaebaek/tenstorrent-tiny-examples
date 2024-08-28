@@ -141,12 +141,9 @@ results between their tiles. In the kernel, we do not have "add" operation, but
 it works. That's why I concluded that `matmul_tiles(..)` conducts `DST += A * B`
 instead of `DST = A * B`.
 
-### Multi-cast (WIP)
+### Multi-cast
 
-I investigated the [multi-cast example provided by Tenstorrent](
-https://github.com/tenstorrent/tt-metal/blob/main/tt_metal/programming_examples/matmul_multicore_reuse_mcast/matmul_multicore_reuse_mcast.cpp)
-in depth, and I implemented my own example to test it.
-My plan for `src/multicast_matmul.cpp` is:
+`src/multicast_matmul.cpp` is now working:
 
 * Create two matrices that have dimensions `number of cores * tile height (32)`
   by `tile width` and `tile width` by `number of cores * tile height (32)`.
@@ -159,14 +156,6 @@ My plan for `src/multicast_matmul.cpp` is:
     cores.
   * Each compute kernel runs the mat-mul for two tiles for the i-th row of `A`
     and the i-th column of `B`.
-
-Currently, the mat-mul result is different between CPU and my example, but
-the multi-cast seems to be working. I printed each first float value of tile
-from receivers and senders. When I run `./bin/tiny_tt_examples` twice after
-setting `export TT_METAL_DPRINT_CORES=0,0` and
-`export TT_METAL_DPRINT_CORES=3,7` (or print from other cores), respectively,
-the results showed that the first value of matrices between receivers and
-senders are matching.
 
 ### Compute kernel debugging tip: UNPACK, MATH, PACK kernels
 

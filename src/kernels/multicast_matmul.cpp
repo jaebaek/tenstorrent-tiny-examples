@@ -18,7 +18,7 @@
 #include "compute_kernel_api/tile_move_copy.h"
 #include "debug/dprint.h"
 
-#define TINY_DEBUG 1
+#define TINY_DEBUG 0
 
 #if TINY_DEBUG
 #ifdef UCK_CHLKC_UNPACK
@@ -34,19 +34,20 @@
 #define LOG(x)
 #endif
 
+static inline SliceRange hw_all() {
+  return SliceRange{.h0 = 0, .h1 = 32, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1};
+}
+
 constexpr uint32_t number_of_cores = get_compile_time_arg_val(0);
 
 namespace NAMESPACE {
 void MAIN {
   uint32_t core_id = get_arg_val<uint32_t>(0);
 
-  LOG(__LINE__ << " core_id: " << core_id << ENDL());
   mm_init();
   cb_wait_front(tt::CB::c_in0, /* number of tiles */ 1);
 
   for (uint32_t i = 0; i < number_of_cores; ++i) {
-    LOG(__LINE__ << " i: " << i << ENDL());
-
     if (i == core_id) {
       cb_wait_front(tt::CB::c_in2, /* number of tiles */ 1);
       cb_wait_front(tt::CB::c_in1, /* number of tiles */ 1);
@@ -75,11 +76,15 @@ void MAIN {
 
     cb_reserve_back(tt::CB::c_out0, /* number of tiles */ 1);
     pack_tile(0, tt::CB::c_out0);
+
+#if TINY_DEBUG
+    DPRINT_PACK(DPRINT << "[PACK]" << TSLICE(tt::CB::c_out0, 0, hw_all())
+                       << ENDL());
+#endif
+
     cb_push_back(tt::CB::c_out0, /* number of tiles */ 1);
 
     tile_regs_release();  // Pack kernel releases lock for DEST registers
-
-    LOG(__LINE__ << " i (done) : " << i << ENDL());
   }
 
   cb_pop_front(tt::CB::c_in0, /* number of tiles */ 1);

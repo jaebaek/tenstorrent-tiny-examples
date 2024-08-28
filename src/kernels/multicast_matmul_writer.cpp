@@ -15,6 +15,19 @@
 #include <stdint.h>
 
 #include "dataflow_api.h"
+#include "debug/dprint.h"
+
+#define TINY_DEBUG 0
+
+#if TINY_DEBUG
+#define LOG(X) DPRINT_DATA0(X)
+#else
+#define LOG(X)
+#endif
+
+static inline SliceRange hw_all() {
+  return SliceRange{.h0 = 0, .h1 = 32, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1};
+}
 
 constexpr uint32_t number_of_cores = get_compile_time_arg_val(0);
 constexpr uint32_t tile_size_in_bytes = get_tile_size(tt::CB::c_out0);
